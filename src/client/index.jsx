@@ -24,7 +24,91 @@ const POLL_HIDDEN_MS = 15000;
 
 /** 样式命名空间前缀，避开 DSH 自己的类名 */
 const CLS = 'dz';
+
 const STYLE_ID = `${NS}-styles`;
+
+/** 可开关的动效；每项对应一个 CSS 钩子 */
+const MOTION_DEFS = [
+  { key: 'drop',   label: '入场弹入',     hint: '首次出现时从上方轻轻落下',       default: true },
+  { key: 'spring', label: '展开弹性',     hint: '悬停展开时的回弹曲线',           default: true },
+  { key: 'bob',    label: '在跑浮动',     hint: '有会话运行时岛仔上下轻浮',       default: true },
+  { key: 'blink',  label: '岛仔眨眼',     hint: '小生物每隔几秒眨一次眼',         default: true },
+  { key: 'pulse',  label: '状态点呼吸',   hint: '运行状态点向外扩散的光晕',       default: true },
+  { key: 'toast',  label: '提示动画',     hint: '操作回执弹出的缩放淡入',         default: true },
+  { key: 'hover',  label: '悬停展开',     hint: '关闭后只能点击岛体展开',         default: true },
+  { key: 'reduce', label: '跟随系统减少动效', hint: '系统开启「减少动态效果」时自动全关', default: true },
+];
+
+const MOTION_KEY = `${NS}.motion`;
+
+function readMotion() {
+  const defaults = Object.fromEntries(MOTION_DEFS.map((d) => [d.key, d.default]));
+  try {
+    const raw = window.localStorage.getItem(MOTION_KEY);
+    if (!raw) return defaults;
+    const saved = JSON.parse(raw);
+    if (!saved || typeof saved !== 'object') return defaults;
+    return { ...defaults, ...saved };
+  } catch {
+    return defaults;
+  }
+}
+
+function writeMotion(value) {
+  try {
+    window.localStorage.setItem(MOTION_KEY, JSON.stringify(value));
+  } catch {
+    /* ignore */
+  }
+}
+
+/** 动效配置的共享 store：设置页与岛体通过它即时同步（同一页面内） */
+const MOTION_EVENT = 'xcool-dsh-island:motion';
+function broadcastMotion(value) {
+  try {
+    window.dispatchEvent(new CustomEvent(MOTION_EVENT, { detail: value }));
+  } catch {
+    /* ignore */
+  }
+}
+
+function useMotion() {
+  const [motion, setMotion] = useState(readMotion);
+  useEffect(() => {
+    const onChange = (event) => setMotion({ ...readMotion(), ...(event.detail ?? {}) });
+    window.addEventListener(MOTION_EVENT, onChange);
+    const onStorage = (event) => {
+      if (event.key === MOTION_KEY) setMotion(readMotion());
+    };
+    window.addEventListener('storage', onStorage);
+    return () => {
+      window.removeEventListener(MOTION_EVENT, onChange);
+      window.removeEventListener('storage', onStorage);
+    };
+  }, []);
+  const update = (key, value) => {
+    const next = { ...motion, [key]: value };
+    setMotion(next);
+    writeMotion(next);
+    broadcastMotion(next);
+  };
+  const reset = () => {
+    const defaults = Object.fromEntries(MOTION_DEFS.map((d) => [d.key, d.default]));
+    setMotion(defaults);
+    writeMotion(defaults);
+    broadcastMotion(defaults);
+  };
+  return { motion, update, reset };
+}
+
+/** 生成 data-motion-* 属性，供 CSS 逐项关闭动画 */
+function motionAttrs(motion) {
+  const attrs = {};
+  for (const def of MOTION_DEFS) {
+    attrs[`data-motion-${def.key}`] = motion[def.key] === false ? 'off' : 'on';
+  }
+  return attrs;
+}
 
 const STYLES = `
 .dz-root {
@@ -76,9 +160,10 @@ const STYLES = `
   cursor: pointer;
   transform-origin: top center;
   -webkit-app-region: no-drag;
+  --dz-spring: cubic-bezier(.32, 1.35, .5, 1);
   transition:
-    width .44s cubic-bezier(.32, 1.35, .5, 1),
-    border-radius .44s cubic-bezier(.32, 1.35, .5, 1),
+    width .44s var(--dz-spring),
+    border-radius .44s var(--dz-spring),
     box-shadow .3s ease,
     background-color .3s ease;
   animation: dz-drop .5s cubic-bezier(.32, 1.3, .5, 1);
@@ -224,7 +309,8 @@ const STYLES = `
   display: grid;
   grid-template-rows: 0fr;
   opacity: 0;
-  transition: grid-template-rows .42s cubic-bezier(.32, 1.2, .5, 1), opacity .26s ease;
+  --dz-panel-spring: cubic-bezier(.32, 1.2, .5, 1);
+  transition: grid-template-rows .42s var(--dz-panel-spring), opacity .26s ease;
 }
 .dz-island[data-expanded='true'] .dz-panel {
   grid-template-rows: 1fr;
@@ -456,12 +542,141 @@ const STYLES = `
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
+
+/* ── 动效开关：逐项用 data-motion-* 关掉 ─────────────── */
+.dz-root[data-motion-drop='off'] .dz-island { animation: none; }
+.dz-root[data-motion-spring='off'] .dz-island { --dz-spring: ease; }
+.dz-root[data-motion-spring='off'] .dz-panel { --dz-panel-spring: ease; }
+.dz-root[data-motion-bob='off'] .dz-pet[data-live='true'] { animation: none !important; }
+.dz-root[data-motion-blink='off'] .dz-pet .eye { animation: none !important; }
+.dz-root[data-motion-pulse='off'] .dz-dot[data-live='true'] { animation: none !important; box-shadow: none; }
+.dz-root[data-motion-toast='off'] .dz-toast { animation: none !important; }
+.dz-root[data-motion-toast='off'] .dz-action { transition: none !important; }
+.dz-root[data-motion-spring='off'] .dz-skin,
+.dz-root[data-motion-spring='off'] .dz-meter > i { transition: none !important; }
+/* 跟随系统：只在用户允许时生效 */
+
+/* ── 设置页：动效开关 ─────────────────────────────── */
+.dz-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-width: 720px;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI Variable",
+    "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  color: var(--dsw-alias-label-primary, inherit);
+}
+.dz-settings-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.dz-settings-title { font-size: 14px; font-weight: 600; }
+.dz-settings-sub { margin-top: 3px; font-size: 11.5px; opacity: .55; }
+.dz-settings-reset {
+  appearance: none;
+  border: 1px solid currentColor;
+  background: transparent;
+  color: inherit;
+  padding: 5px 12px;
+  border-radius: 8px;
+  font: inherit;
+  font-size: 11.5px;
+  cursor: pointer;
+  opacity: .7;
+}
+.dz-settings-reset:hover { opacity: 1; }
+
+.dz-settings-grid {
+  display: flex;
+  flex-direction: column;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, currentColor 12%, transparent);
+}
+.dz-settings-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  cursor: pointer;
+  background: color-mix(in srgb, currentColor 3%, transparent);
+}
+.dz-settings-row + .dz-settings-row {
+  border-top: 1px solid color-mix(in srgb, currentColor 10%, transparent);
+}
+.dz-settings-row:hover { background: color-mix(in srgb, currentColor 7%, transparent); }
+.dz-settings-copy { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.dz-settings-copy b { font-size: 12.5px; font-weight: 550; }
+.dz-settings-copy small { font-size: 11px; opacity: .5; }
+.dz-settings-row input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+
+/* iOS 开关 */
+.dz-switch {
+  flex: 0 0 auto;
+  position: relative;
+  width: 38px;
+  height: 22px;
+  border-radius: 999px;
+  background: color-mix(in srgb, currentColor 18%, transparent);
+  transition: background-color .22s ease;
+}
+.dz-switch::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .3);
+  transition: transform .22s cubic-bezier(.32, 1.4, .5, 1);
+}
+.dz-settings-row input:checked + .dz-switch { background: #30d158; }
+.dz-settings-row input:checked + .dz-switch::after { transform: translateX(16px); }
+.dz-settings-row input:focus-visible + .dz-switch { outline: 2px solid #0a84ff; outline-offset: 2px; }
+
+.dz-settings-foot {
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, .78);
+  color: #fff;
+}
+.dz-settings-demo {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  animation: dz-drop .5s cubic-bezier(.32, 1.3, .5, 1);
+}
+.dz-settings-demo .dz-pet { width: 24px; height: 24px; overflow: visible; }
+.dz-settings-demo .dz-pet .body { fill: #0a84ff; opacity: .95; }
+.dz-settings-demo .dz-pet .eye { fill: #fff; transform-origin: center; animation: dz-blink 5.2s infinite; }
+.dz-settings-demo .dz-pet[data-live='true'] { animation: dz-bob 3s ease-in-out infinite; }
+.dz-settings-demo .dz-dot { background: #30d158; }
+
+/* 设置页里的动效也遵守开关 */
+.dz-settings[data-motion-drop='off'] .dz-settings-demo { animation: none; }
+.dz-settings[data-motion-bob='off'] .dz-settings-demo .dz-pet { animation: none !important; }
+.dz-settings[data-motion-blink='off'] .dz-settings-demo .dz-pet .eye { animation: none !important; }
+.dz-settings[data-motion-pulse='off'] .dz-settings-demo .dz-dot { animation: none !important; box-shadow: none; }
+
 @media (prefers-reduced-motion: reduce) {
-  .dz-island, .dz-dot, .dz-pet, .dz-pet .eye, .dz-panel, .dz-skin, .dz-meter > i, .dz-action, .dz-toast {
+  .dz-root[data-motion-reduce='on'] .dz-island,
+  .dz-root[data-motion-reduce='on'] .dz-dot,
+  .dz-root[data-motion-reduce='on'] .dz-pet,
+  .dz-root[data-motion-reduce='on'] .dz-pet .eye,
+  .dz-root[data-motion-reduce='on'] .dz-panel,
+  .dz-root[data-motion-reduce='on'] .dz-skin,
+  .dz-root[data-motion-reduce='on'] .dz-action,
+  .dz-root[data-motion-reduce='on'] .dz-toast {
     animation: none !important;
     transition: none !important;
   }
 }
+
 `;
 
 /* ── 数据 ─────────────────────────────────────────── */
@@ -743,6 +958,7 @@ function Island() {
   const { state, reachable } = useIslandState();
   const { toast, run, show } = useAction();
   const position = usePosition();
+  const { motion } = useMotion();
   // 离线预览页 ?expand=1 强制展开；生产环境不带该参数
   const [pinned, setPinned] = useState(() => {
     try {
@@ -766,9 +982,9 @@ function Island() {
     }
   }, [skin]);
 
-  // 悬停延迟展开
+  // 悬停延迟展开（可在设置里关掉，关掉后只靠点击）
   const handleEnter = () => {
-    if (pinned) return;
+    if (pinned || motion.hover === false) return;
     if (hoverTimer.current) clearTimeout(hoverTimer.current);
     hoverTimer.current = window.setTimeout(() => setHovered(true), HOVER_DELAY_MS);
   };
@@ -879,6 +1095,7 @@ function Island() {
       className={`${CLS}-root`}
       ref={rootRef}
       data-dragged={position.pos ? 'true' : 'false'}
+      {...motionAttrs(motion)}
       style={
         position.pos
           ? { position: 'fixed', top: position.pos.y, left: position.pos.x, right: 'auto' }
@@ -1109,6 +1326,65 @@ function Island() {
   );
 }
 
+/* ── 设置页：动效开关 ─────────────────────────────── */
+
+function IslandSettingsSection() {
+  const { motion, update, reset } = useMotion();
+  const [previewPulse, setPreviewPulse] = useState(0);
+
+  // 每次改动后重放一次预览动画；配置广播由 useMotion().update 负责
+  const preview = () => setPreviewPulse((n) => n + 1);
+
+  return (
+    <div className={`${CLS}-settings`} data-no-drag {...motionAttrs(motion)}>
+      <div className={`${CLS}-settings-head`}>
+        <div>
+          <div className={`${CLS}-settings-title`}>XCool-DSH灵动岛 · 动效</div>
+          <div className={`${CLS}-settings-sub`}>
+            逐项开关，改动立即生效并保存到本机（localStorage）
+          </div>
+        </div>
+        <button type="button" className={`${CLS}-settings-reset`} onClick={reset}>
+          恢复默认
+        </button>
+      </div>
+
+      <div className={`${CLS}-settings-grid`}>
+        {MOTION_DEFS.map((def) => (
+          <label className={`${CLS}-settings-row`} key={def.key} title={def.hint}>
+            <span className={`${CLS}-settings-copy`}>
+              <b>{def.label}</b>
+              <small>{def.hint}</small>
+            </span>
+            <input
+              type="checkbox"
+              role="switch"
+              checked={motion[def.key] !== false}
+              onChange={(event) => {
+                update(def.key, event.target.checked);
+                preview();
+              }}
+            />
+            <span className={`${CLS}-switch`} aria-hidden="true" />
+          </label>
+        ))}
+      </div>
+
+      <div className={`${CLS}-settings-foot`} key={previewPulse}>
+        <span className={`${CLS}-settings-demo`} data-skin="ink">
+          <svg className={`${CLS}-pet`} viewBox="0 0 24 24" data-tone="live" data-live="true" aria-hidden="true">
+            <rect className="body" x="2.5" y="5" width="19" height="14" rx="7" />
+            <circle className="eye" cx="9.5" cy="12" r="1.7" />
+            <circle className="eye" cx="14.5" cy="12" r="1.7" />
+          </svg>
+          <span className={`${CLS}-dot`} data-live="true" data-tone="live" />
+          <span>预览：岛仔会眨眼、浮动，状态点会呼吸</span>
+        </span>
+      </div>
+    </div>
+  );
+}
+
 /* ── 插件入口 ─────────────────────────────────────── */
 
 export const name = `${NS}-client`;
@@ -1148,6 +1424,21 @@ export function apply(ctx) {
           order: 60,
         },
         Island,
+      ),
+    ),
+  );
+
+  // 设置页：动效开关（与 qqbot 相同的 settings.section 注册方式）
+  disposers.push(
+    slots.inject('settings.section', () =>
+      slots.register(
+        {
+          name: 'settings.section',
+          id: 'xcool-dsh-island',
+          order: 61,
+          label: 'XCool-DSH灵动岛',
+        },
+        IslandSettingsSection,
       ),
     ),
   );
