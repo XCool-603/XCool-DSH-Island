@@ -1,0 +1,8 @@
+node_modules/
+*.log
+.DS_Store
+Thumbs.db
+*.mojibake.bak
+*.island-backup
+dsh-island-*.json
+lib/*.map
