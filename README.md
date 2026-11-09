@@ -69,7 +69,7 @@ DSH 窗口最顶部正中悬一枚小岛，收起时一行看完当前会话在�
 不带 `keepInbox` 的 cancel、静默改审批策略/模型选择、注册 `/api/*` 路由、宿主侧伪造 Electron clipboard。
 ## 动效设置
 
-在 **设置 → 插件 → XCool-DSH灵动岛** 里可以逐项开关（iOS 风格开关，改动立即生效、保存到 localStorage）：
+在 **设置 → XCool-DSH灵动岛**（左侧导航的独立分区，与「通用 / 模型 / 内置插件」并列）里可以逐项开关（iOS 风格开关，改动立即生效、保存到 localStorage）：
 
 | 开关 | 效果 |
 |---|---|
@@ -153,7 +153,7 @@ pnpm install --offline
 所以**不需要**再往 profile 的 `cordis.patch.yml` 里写 `insert`（写了反而重复）。
 
 改完 `package.json` 会触发宿主 recomposition；刷新页面后即可在
-「设置 → 插件 → 已安装插件」里看到 **xcool-dsh-island**。
+「设置 → 插件 → 已安装插件」里看到 **xcool-dsh-island**；动效开关则在左侧导航的 **XCool-DSH灵动岛** 分区里。
 
 ## 开发
 
