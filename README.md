@@ -80,31 +80,55 @@ cd XCool-DSH-Island
 
 ```
 ~/.dsh/profiles/desktop/node_modules/xcool-dsh-island  →  <你的插件目录>/XCool-DSH灵动岛   (junction)
-~/.dsh/profiles/desktop/cordis.patch.yml                末尾追加：
-    - insert:
-        - id: island
-          name: 'xcool-dsh-island'
+~/.dsh/profiles/desktop/package.json
+    dependencies["xcool-dsh-island"] = "link:<你的插件目录>/XCool-DSH灵动岛"
+    dsh.profile.bundles 里追加 "xcool-dsh-island"
+~/.dsh/profiles/desktop/pnpm-lock.yaml  记录同一个 link:
 ```
 
-改完 `cordis.patch.yml` 会触发宿主重载，**不需要重启桌面应用**。
+loader 条目由包自带的 `cordis.patch.yml`（`dsh.bundle.patch`）插入；
+profile 的 `cordis.patch.yml` 里**不再**重复写 `insert`。
+改 `package.json` 会触发宿主 recomposition，**不需要重启桌面应用**。
 
 ### 从零安装
 
+**只写 `cordis.patch.yml` 的 `insert` 是不够的**：插件能加载，但「设置 → 插件」列表里不会出现。
+插件管理页读的是 `profile/package.json` 的 `dependencies` + `dsh.profile.bundles`，两处都要有。
+
 ```powershell
-# 1) 让 profile 能按包名解析到本地插件（junction 即可，不必跑 pnpm）
+# 1) 让 profile 能按包名解析到本地插件
 New-Item -ItemType Junction `
   -Path "$env:USERPROFILE\.dsh\profiles\desktop\node_modules\xcool-dsh-island" `
   -Target "<你的插件目录>/XCool-DSH灵动岛"
 
-# 2) 在 profile patch 里新增一行（注意是 insert 形态，见「踩坑记录」）
+# 2) 在 profile 目录跑一次 pnpm install（离线即可，会自动把 link 依赖写进 lock）
+cd "$env:USERPROFILE\.dsh\profiles\desktop"
+pnpm install --offline
 ```
 
-```yaml
-# %USERPROFILE%\.dsh\profiles\desktop\cordis.patch.yml
-- insert:
-    - id: island
-      name: 'xcool-dsh-island'
+```jsonc
+// %USERPROFILE%\.dsh\profiles\desktop\package.json
+{
+  "dependencies": {
+    "xcool-dsh-island": "link:<你的插件目录>/XCool-DSH灵动岛"
+  },
+  "dsh": {
+    "profile": {
+      "bundles": [
+        "@deepseek-ai/dsh-base",
+        "@deepseek-ai/dsh-web-app",
+        "xcool-dsh-island"        // ← 追加这一项
+      ]
+    }
+  }
+}
 ```
+
+包自带的 `cordis.patch.yml`（`dsh.bundle.patch`）会插入 loader 条目，
+所以**不需要**再往 profile 的 `cordis.patch.yml` 里写 `insert`（写了反而重复）。
+
+改完 `package.json` 会触发宿主 recomposition；刷新页面后即可在
+「设置 → 插件 → 已安装插件」里看到 **xcool-dsh-island**。
 
 ## 开发
 
@@ -195,3 +219,7 @@ MIT。视觉与交互创意来自 [Renly1994/xiaotang-daozai](https://github.com
 7. 客户端切会话/新建会话只能走 `ctx.uiWorkspace`；宿主 `sessionController` 没有 open/switch/select。
    `sessionController.createSession` 这个方法名不存在，真名是 `create()`（或 `.agents.createSession`）。
 8. 离线预览默认收起，`preview.html?expand=1` 强制展开、`?collapsed=1` 只看收起态。
+9. **「插件能用但设置里不显示」**：`pluginInventory/list` 投影的是 loader 行，
+   而「已安装插件」页读 `pluginManager.listBundles()` —— 后者只认 `package.json` 的
+   `dependencies` 与 `dsh.profile.bundles`。手工往 `cordis.patch.yml` 塞 `insert`
+   能加载插件但不会出现在清单里；两处都补齐并 `pnpm install --offline` 后才会显示。
