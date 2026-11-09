@@ -149,6 +149,34 @@
 
     mod.apply(ctx);
 
+    // ?settings=1 时把设置页组件单独挂出来预览
+    const settingsParams = new URLSearchParams(location.search);
+    if (settingsParams.get('settings') === '1') {
+      const captured = [];
+      const settingsCtx = {
+        effect: () => () => {},
+        slots: {
+          inject: (name, register) => { register(); return () => {}; },
+          register: (entry, Component) => {
+            if (entry.name === 'settings.section') captured.push(Component);
+            return () => {};
+          },
+        },
+      };
+      // 用同一个 factory 再造一个模块实例，避免污染岛体注册
+      const settingsMod = factory((s) =>
+        s === 'react' ? React : s === 'react/jsx-runtime' ? jsxRuntime : (() => { throw new Error(s); })()
+      );
+      settingsMod.apply(settingsCtx);
+      if (captured.length > 0) {
+        const box = document.createElement('div');
+        box.id = 'settings-preview-box';
+        box.style.cssText = 'position:fixed;inset:40px auto auto 50%;transform:translateX(-50%);width:min(760px,92vw);padding:22px;border-radius:18px;background:#1c1c1e;box-shadow:0 24px 80px rgba(0,0,0,.6);z-index:999';
+        document.body.appendChild(box);
+        ReactDOM.createRoot(box).render(React.createElement(captured[0], {}));
+      }
+    }
+
     // 6. 默认自动展开一次，看完整面板；加 ?collapsed=1 只看收起态
     const params = new URLSearchParams(location.search);
     if (params.get('collapsed') !== '1') {
