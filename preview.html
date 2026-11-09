@@ -141,7 +141,8 @@
       slots: {
         inject: (name, register) => { register(); return () => {}; },
         register: (entry, Component) => {
-          root.render(React.createElement(Component, {}));
+          // apply 会注册多个槽位；岛体预览只渲染 shell.overlay
+          if (entry.name === 'shell.overlay') root.render(React.createElement(Component, {}));
           return () => root.unmount();
         },
       },
@@ -175,6 +176,17 @@
         document.body.appendChild(box);
         ReactDOM.createRoot(box).render(React.createElement(captured[0], {}));
       }
+    }
+
+    // 预览页每次都用默认动效配置，避免被之前的测试值污染
+    try { if (new URLSearchParams(location.search).get('motion') === '1') localStorage.removeItem('island.motion'); } catch (e) {}
+    // __ISLAND_MOTION_CLEAN
+    // ?motion=1 时自动点开岛内的「⚙ 动效」快捷面板
+    if (new URLSearchParams(location.search).get('motion') === '1') {
+      setTimeout(() => {
+        const btn = [...host.querySelectorAll('.dz-action')].find((b) => b.textContent.includes('动效'));
+        btn?.click();
+      }, 900);
     }
 
     // 6. 默认自动展开一次，看完整面板；加 ?collapsed=1 只看收起态
