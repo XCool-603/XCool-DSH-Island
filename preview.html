@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>XCool-DSH灵动岛 · 预览</title>
+<style>
+  /* 假的 DSH 界面背景：只为让毛玻璃有东西可透 */
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    height: 100vh;
+    overflow: hidden;
+    font: 13px/1.6 "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+    background:
+      radial-gradient(1200px 600px at 80% -10%, #2b3a63 0%, transparent 60%),
+      radial-gradient(900px 500px at 10% 110%, #3a2b52 0%, transparent 55%),
+      #12131a;
+    color: #dcdde3;
+  }
+  .mock { display: grid; grid-template-columns: 260px 1fr; height: 100vh; }
+  .mock-side {
+    border-right: 1px solid rgba(255,255,255,.07);
+    padding: 18px 14px;
+    background: rgba(255,255,255,.02);
+  }
+  .mock-brand { font-weight: 600; letter-spacing: .04em; opacity: .8; margin-bottom: 16px; }
+  .mock-item {
+    padding: 7px 9px; border-radius: 8px; margin-bottom: 4px;
+    background: rgba(255,255,255,.04); opacity: .75;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .mock-item.active { background: rgba(124,149,255,.16); opacity: 1; }
+  .mock-main { padding: 24px 32px; max-width: 760px; }
+  .mock-turn { margin-bottom: 20px; }
+  .mock-role { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; opacity: .45; margin-bottom: 5px; }
+  .mock-bubble {
+    padding: 11px 14px; border-radius: 12px;
+    background: rgba(255,255,255,.045); border: 1px solid rgba(255,255,255,.06);
+  }
+  .mock-bubble.user { background: rgba(124,149,255,.12); border-color: rgba(124,149,255,.22); }
+  .mock-caret { display: inline-block; width: 7px; height: 15px; background: #7c95ff; vertical-align: -2px; animation: blink 1.1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+  .hint {
+    position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%);
+    font-size: 12px; opacity: .45; letter-spacing: .02em;
+    background: rgba(0,0,0,.35); padding: 7px 14px; border-radius: 999px;
+    border: 1px solid rgba(255,255,255,.08);
+  }
+</style>
+</head>
+<body>
+<div class="mock">
+  <aside class="mock-side">
+    <div class="mock-brand">DeepSeek Harness · 预览</div>
+    <div class="mock-item active">做 DSH 悬浮信息岛</div>
+    <div class="mock-item">重构会话列表</div>
+    <div class="mock-item">修 sandbox ACL 判断</div>
+    <div class="mock-item">周报汇总脚本</div>
+  </aside>
+  <main class="mock-main">
+    <div class="mock-turn">
+      <div class="mock-role">你</div>
+      <div class="mock-bubble user">这个 UI 不错，可以做成 DSH 的插件吗？</div>
+    </div>
+    <div class="mock-turn">
+      <div class="mock-role">dsh</div>
+      <div class="mock-bubble">可以。岛体挂进 shell.overlay，收起是一枚含运行状态的小岛，悬停展开看会话、待办与额度。<span class="mock-caret"></span></div>
+    </div>
+  </main>
+</div>
+<div class="hint">这是离线预览：数据为假数据，悬停/点击岛体可展开</div>
+
+<script src="./node_modules/react/umd/react.production.min.js"></script>
+<script src="./node_modules/react-dom/umd/react-dom.production.min.js"></script>
+<script>
+  // 1. 模拟客户端模块系统的 require 种子表
+  const jsxRuntime = {
+    jsx: (type, props, key) => React.createElement(type, key === undefined ? props : { ...props, key }),
+    jsxs: (type, props, key) => React.createElement(type, key === undefined ? props : { ...props, key }),
+    Fragment: React.Fragment,
+  };
+
+  // 2. 模拟 __ModuleLoader__
+  const registry = new Map();
+  window.__ModuleLoader__ = {
+    load({ id, factory }) { registry.set(id, factory); },
+  };
+
+  // 3. 假数据：让面板有内容可看
+  const MOCK = {
+    ok: true,
+    updatedAt: Date.now(),
+    sessions: 4,
+    busy: true,
+    session: { id: 'demo', title: '做 DSH 悬浮信息岛', model: 'deepseek-v4.1' },
+    usage: { percent: 34, used: 68000, capacity: 200000, label: '68k / 200k' },
+    tokens: 68000,
+    todos: [
+      { content: '摸清客户端插件契约', done: true },
+      { content: '实现悬浮岛 UI', done: true },
+      { content: '接宿主实时数据', done: false },
+      { content: '装进 desktop profile 验证', done: false },
+      { content: '补审批与日程', done: false },
+    ],
+    jobs: [{ id: 'turn', title: '正在处理', elapsed: '' }],
+    schedule: [{ id: 's1', title: '每日回顾', when: '2 小时后' }],
+    approvals: [],
+  };
+
+  // 拦截轮询
+  const realFetch = window.fetch;
+  window.fetch = async (url) => {
+    if (String(url).includes('/island/state')) {
+      return { ok: true, status: 200, json: async () => MOCK };
+    }
+    return realFetch ? realFetch(url) : Promise.reject(new Error('offline'));
+  };
+
+  // 4. 载入产物
+  document.write('<script src="./lib/client.js"><\/script>');
+</script>
+<script>
+  const factory = registry.get('xcool-dsh-island');
+  if (!factory) {
+    document.body.insertAdjacentHTML('beforeend',
+      '<div class="hint" style="color:#f88">产物未注册：先运行 node build.mjs</div>');
+  } else {
+    const mod = factory((specifier) => {
+      if (specifier === 'react') return React;
+      if (specifier === 'react/jsx-runtime') return jsxRuntime;
+      throw new Error('unexpected external: ' + specifier);
+    });
+
+    // 5. 假 ctx：只提供 slots
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const root = ReactDOM.createRoot(host);
+    const ctx = {
+      effect: () => () => {},
+      slots: {
+        inject: (name, register) => { register(); return () => {}; },
+        register: (entry, Component) => {
+          root.render(React.createElement(Component, {}));
+          return () => root.unmount();
+        },
+      },
+    };
+
+    mod.apply(ctx);
+
+    // 6. 默认自动展开一次，看完整面板；加 ?collapsed=1 只看收起态
+    const params = new URLSearchParams(location.search);
+    if (params.get('collapsed') !== '1') {
+      const expand = () => {
+        const root = host.querySelector('.dz-root');
+        const island = host.querySelector('.dz-island');
+        if (!root || !island) return;
+        root.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, relatedTarget: document.body }));
+        island.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, relatedTarget: root }));
+      };
+      setTimeout(expand, 500);
+      setTimeout(expand, 1200);
+    }
+  }
+</script>
+</body>
+</html>
