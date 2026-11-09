@@ -15,7 +15,7 @@ import { randomUUID } from 'node:crypto';
 const MAX_EVENTS = 8;
 const DEDUPE_MS = 1200;
 
-export function createNotifier() {
+export function createNotifier(onChange) {
   let seq = 0;
   const events = [];
   const recent = new Map();
@@ -43,6 +43,10 @@ export function createNotifier() {
       at: now,
     });
     while (events.length > MAX_EVENTS) events.shift();
+    // 有新通知时让宿主快照缓存失效，保证提示不被 TTL 拖慢
+    if (typeof onChange === 'function') {
+      try { onChange(); } catch { /* ignore */ }
+    }
   }
 
   /** 注册一个可选监听：事件名不存在、ctx.on 抛错都静默跳过 */
@@ -253,9 +257,9 @@ function sessionEventMap(session, event) {
     return { kind: 'success', title: '命令已完成', detail: String(label).slice(0, 80), key: `cmd:${event?.seq}` };
   }
 
-  // 轮次开始
+  // 轮次开始：与其它「开始运行」通道共用去重 key
   if (type === 'turn/start') {
-    return { kind: 'running', title: '开始处理', detail: title, key: `turnstart:${session?.id}:${event?.seq}` };
+    return { kind: 'running', title: '开始处理', detail: title, key: `run:${session?.id ?? ''}` };
   }
 
   return null;
@@ -266,15 +270,17 @@ export const EVENT_DEFINITIONS = [
   { event: 'session/event', map: sessionEventMap },
 
   // api-session-controller 转发的无 scope 事件（dsh-api-session-controller/lib/index.js:2991）
+  // 只在「转为运行时」提示；转 idle 不打扰（岛体状态点已经表达）
   {
     event: 'api-session/status',
     map: (payload) => {
       const running = payload?.running ?? payload?.status === 'running';
+      if (!running) return null;
       return {
         kind: 'running',
-        title: running ? '开始运行' : '已空闲',
+        title: '开始运行',
         detail: '',
-        key: `apis:${payload?.sessionId ?? ''}:${running}`,
+        key: `run:${payload?.sessionId ?? ''}`,
       };
     },
   },
@@ -289,17 +295,13 @@ export const EVENT_DEFINITIONS = [
   },
 
   // agent/status 是 agent-scoped 派发，但无 scope 标签的宿主监听器全局通过
+  // 与 api-session/status 共用同一个去重 key，避免同一次状态变化弹两次
   {
     event: 'agent/status',
     map: (payload) => {
-      const status = payload?.status;
-      if (status !== 'running' && status !== 'idle') return null;
-      return {
-        kind: 'running',
-        title: status === 'running' ? '开始运行' : '已空闲',
-        detail: '',
-        key: `ags:${payload?.agent?.id ?? payload?.sessionId ?? ''}:${status}`,
-      };
+      if (payload?.status !== 'running') return null;
+      const id = payload?.agent?.id ?? payload?.sessionId ?? payload?.id ?? '';
+      return { kind: 'running', title: '开始运行', detail: '', key: `run:${id}` };
     },
   },
 
