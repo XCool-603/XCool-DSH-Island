@@ -20,6 +20,7 @@
 
 import { writeFileSync } from 'node:fs';
 import { runAction, ACTION_NAMES } from './actions.js';
+import { createNotifier, collectJobs, diffJobs, EVENT_DEFINITIONS } from './notifications.js';
 
 export const name = 'island';
 
@@ -36,6 +37,11 @@ const DIAG_FILE = `${DEBUG_DIR}\\dsh-island-diag.json`;
 const SNAPSHOT_FILE = `${DEBUG_DIR}\\dsh-island-state.json`;
 
 const isFn = (value) => typeof value === 'function';
+
+/** 通知收集器与作业状态快照：模块级单例，热重载后会重建 */
+const notifier = createNotifier();
+const jobStatuses = new Map();
+let jobSampling = true;
 
 /** 取不到就返回 fallback，绝不抛 */
 function safe(fn, fallback) {
@@ -291,6 +297,15 @@ function formatTokens(n) {
 let lastRows = [];
 
 async function buildState(ctx) {
+  // 作业状态差分 → 生成「运行中 / 完成 / 异常」通知
+  // 全部包在 try/catch 里：jobs 服务缺失或结构变化都不能让状态接口挂掉
+  try {
+    diffJobs(notifier, jobStatuses, collectJobs(ctx), { initial: jobSampling });
+    jobSampling = false;
+  } catch {
+    /* 忽略：通知是增强，不是主链路 */
+  }
+
   const rows = await listRows(ctx);
   if (rows.length > 0) lastRows = rows;
 
@@ -339,6 +354,7 @@ async function buildState(ctx) {
     jobs,
     schedule,
     approvals: [],
+    notifications: notifier.snapshot(),
   };
 }
 
@@ -513,6 +529,11 @@ export function apply(ctx) {
   let lastDump = 0;
 
   safe(() => logger.info?.(`island: 状态接口就绪 ${STATE_PATH}`));
+  // 挂全局事件监听（逐个 try/catch；缺事件不影响插件）
+  // ctx.on 内部已带 fiber effect，这里再用 ctx.effect 统一收口，HMR 重载不泄漏
+  const detach = notifier.attach(ctx, EVENT_DEFINITIONS);
+  ctx.effect?.(() => () => detach(), 'island.notifications');
+  disposers.push(detach);
   // 装载即留痕：没有浏览器也能确认宿主端接上了
   void (async () => dumpTo(DIAG_FILE, await diagnose(ctx)))();
 
