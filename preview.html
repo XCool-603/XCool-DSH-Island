@@ -106,6 +106,15 @@
     jobs: [{ id: 'turn', title: '正在处理', elapsed: '' }],
     schedule: [{ id: 's1', title: '每日回顾', when: '2 小时后' }],
     approvals: [],
+    // __ISLAND_NOTICE_MOCK
+    notifications: new URLSearchParams(location.search).get('notices') === '1' ? {
+      seq: 3,
+      items: [
+        { seq: 1, id: 'n1', kind: 'success', title: '已完成', detail: '构建脚本 · 2 分钟前', at: Date.now() - 120000 },
+        { seq: 2, id: 'n2', kind: 'error', title: '运行异常', detail: '测试 · exit 1', at: Date.now() - 60000 },
+        { seq: 3, id: 'n3', kind: 'running', title: '开始运行', detail: '正在处理', at: Date.now() - 3000 },
+      ],
+    } : { seq: 0, items: [] },
   };
 
   // 拦截轮询
