@@ -763,6 +763,28 @@ const STYLES = `
   animation: dz-toast-in .28s cubic-bezier(.32, 1.4, .5, 1);
 }
 .dz-toast[data-ok='false'] { background: rgba(120, 32, 32, 0.95); }
+/* 三类状态提示：运行中=蓝、完成=绿、异常=红 */
+.dz-toast { gap: 8px; max-width: 360px; }
+.dz-toast[data-kind='success'] { background: rgba(20, 78, 46, 0.95); }
+.dz-toast[data-kind='error']   { background: rgba(120, 32, 32, 0.96); }
+.dz-toast[data-kind='running'] { background: rgba(16, 52, 96, 0.95); }
+.dz-toast-icon {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  font-size: 10px;
+  font-weight: 700;
+  background: rgba(255, 255, 255, .16);
+}
+.dz-toast[data-kind='running'] .dz-toast-icon { animation: dz-spin 1.2s linear infinite; }
+.dz-toast-copy { display: flex; flex-direction: column; min-width: 0; }
+.dz-toast-copy b { font-weight: 600; }
+.dz-toast-copy small { opacity: .72; font-size: 10.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@keyframes dz-spin { from { transform: rotate(0); } to { transform: rotate(360deg); } }
 
 /* ── 拖动 ─────────────────────────────────────────── */
 .dz-island { touch-action: none; cursor: grab; }
@@ -810,6 +832,18 @@ const STYLES = `
 .dz-root[data-motion-spring='off'] .dz-meter > i { transition: none !important; }
 /* 跟随系统：只在用户允许时生效 */
 
+
+
+/* 最近状态的三色点 */
+.dz-notice-dot {
+  flex: 0 0 auto;
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--dz-green);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--dz-green) 60%, transparent);
+}
+.dz-notice-dot[data-kind='running'] { background: #0a84ff; box-shadow: 0 0 6px rgba(10,132,255,.6); }
+.dz-notice-dot[data-kind='error']   { background: var(--dz-red); box-shadow: 0 0 6px rgba(255,69,58,.6); }
 
 /* ── 岛内动效快捷面板 ────────────────────────────── */
 .dz-action[data-active='true'] {
@@ -1050,14 +1084,64 @@ function useIslandState() {
 }
 
 /** 调用宿主动作；结果以 toast 形式反馈，失败也不打断岛体 */
+
+/** 监听宿主下发的通知流：只弹「本次会话没见过」的，刷新页面不重放历史 */
+function useNotifications(state, show) {
+  const lastSeq = useRef(null);
+  const showRef = useRef(show);
+  showRef.current = show;
+  const latest = state?.notifications?.seq ?? null;
+
+  useEffect(() => {
+    const payload = state?.notifications;
+    if (!payload || typeof payload.seq !== 'number') return;
+    const items = Array.isArray(payload.items) ? payload.items : [];
+
+    // 首次拿到快照：记下水线，不回放历史
+    if (lastSeq.current === null) {
+      lastSeq.current = payload.seq;
+      return;
+    }
+    // 宿主重启后 seq 会变小：重新对齐水线，不回放、也不卡死
+    if (payload.seq < lastSeq.current) {
+      lastSeq.current = payload.seq;
+      return;
+    }
+    if (payload.seq <= lastSeq.current) return;
+
+    const fresh = items.filter((item) => item.seq > lastSeq.current);
+    lastSeq.current = payload.seq;
+    if (fresh.length === 0) return;
+
+    // 一次最多弹 2 条，避免批量结算刷屏
+    for (const item of fresh.slice(-2)) {
+      const line = item.detail
+        ? `${item.title} · ${item.detail}`
+        : item.title || '状态更新';
+      const kind = item.kind === 'error' ? 'error' : item.kind === 'running' ? 'running' : 'success';
+      showRef.current(line, kind);
+    }
+  }, [latest]);
+}
+
 function useAction() {
   const [toast, setToast] = useState(null);
   const timer = useRef(0);
 
-  const show = (text, ok) => {
+  /**
+   * 弹一条回执。kind: 'running' | 'success' | 'error'；
+   * 兼容旧的布尔 ok 参数（true→success，false→error）。
+   */
+  const show = (text, okOrKind = true, detail = '') => {
+    const kind =
+      typeof okOrKind === 'string'
+        ? okOrKind
+        : okOrKind
+          ? 'success'
+          : 'error';
     if (timer.current) clearTimeout(timer.current);
-    setToast({ text, ok, id: Date.now() });
-    timer.current = window.setTimeout(() => setToast(null), 2600);
+    setToast({ text, detail, kind, id: Date.now() });
+    timer.current = window.setTimeout(() => setToast(null), kind === 'running' ? 2200 : 3200);
   };
 
   useEffect(() => () => {
@@ -1267,6 +1351,15 @@ function Empty({ children }) {
 
 /* ── 岛主体 ───────────────────────────────────────── */
 
+function formatAgo(at) {
+  if (!Number.isFinite(at)) return '';
+  const delta = Math.max(0, Math.round((Date.now() - at) / 1000));
+  if (delta < 10) return '刚刚';
+  if (delta < 60) return `${delta} 秒前`;
+  if (delta < 3600) return `${Math.floor(delta / 60)} 分钟前`;
+  return `${Math.floor(delta / 3600)} 小时前`;
+}
+
 const SKINS = [
   { id: 'ink', color: '#2a2a31', label: '深空' },
   { id: 'cream', color: '#f2e8d8', label: '奶油' },
@@ -1288,6 +1381,7 @@ function readSkin() {
 function Island() {
   const { state, reachable } = useIslandState();
   const { toast, run, show } = useAction();
+  useNotifications(state, show);
   const position = usePosition();
   const { motion, update: updateMotion, reset: resetMotion } = useMotion();
   const [showMotion, setShowMotion] = useState(false);
@@ -1355,6 +1449,7 @@ function Island() {
   const approvals = state.approvals ?? [];
   const todos = state.todos ?? [];
   const jobs = state.jobs ?? [];
+  const notices = (state.notifications?.items ?? []).slice(-3).reverse();
   const schedule = state.schedule ?? [];
   const runningCount = state.runningCount ?? (state.busy ? 1 : 0);
   const openTodos = todos.filter((item) => !item.done);
@@ -1491,6 +1586,17 @@ function Island() {
         <div className={`${CLS}-panel`}>
           <div className={`${CLS}-panel-inner`}>
             <div className={`${CLS}-body`}>
+              {notices.length > 0 ? (
+                <Section title="最近状态" extra={`${notices.length} 条`}>
+                  {notices.map((item) => (
+                    <div className={`${CLS}-row`} key={item.id ?? item.seq}>
+                      <span className={`${CLS}-notice-dot`} data-kind={item.kind} />
+                      <span className={`${CLS}-row-text`}>{item.title}</span>
+                      <span className={`${CLS}-row-sub`}>{item.detail || formatAgo(item.at)}</span>
+                    </div>
+                  ))}
+                </Section>
+              ) : null}
               {jobs.length > 0 ? (
                 <Section title="运行中" extra={`${jobs.length} 个会话`}>
                   {jobs.slice(0, 4).map((job, index) => (
@@ -1686,8 +1792,14 @@ function Island() {
         </div>
       </div>
       {toast ? (
-        <div className={`${CLS}-toast`} data-ok={toast.ok ? 'true' : 'false'} key={toast.id}>
-          {toast.ok ? '✓' : '!'} {toast.text}
+        <div className={`${CLS}-toast`} data-kind={toast.kind ?? 'success'} key={toast.id}>
+          <span className={`${CLS}-toast-icon`}>
+            {toast.kind === 'error' ? '!' : toast.kind === 'running' ? '◌' : '✓'}
+          </span>
+          <span className={`${CLS}-toast-copy`}>
+            <b>{toast.text}</b>
+            {toast.detail ? <small>{toast.detail}</small> : null}
+          </span>
         </div>
       ) : null}
     </div>
