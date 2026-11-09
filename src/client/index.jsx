@@ -155,7 +155,11 @@ const STYLES = `
   max-width: min(560px, calc(100vw - 24px));
   border-radius: 999px;
   background: var(--dz-bg);
-  box-shadow: 0 0 0 .5px rgba(255, 255, 255, 0.1), 0 10px 34px rgba(0, 0, 0, 0.5);
+  box-shadow:
+    0 0 0 .5px rgba(255, 255, 255, 0.1),
+    0 10px 34px rgba(0, 0, 0, 0.5),
+    0 0 18px rgba(10, 132, 255, .18);
+  animation: dz-drop .5s cubic-bezier(.32, 1.3, .5, 1), dz-glow 4.5s ease-in-out infinite .5s;
   overflow: hidden;
   cursor: pointer;
   transform-origin: top center;
@@ -172,7 +176,6 @@ const STYLES = `
   width: 396px;
   border-radius: 26px;
   box-shadow: 0 0 0 .5px rgba(255, 255, 255, 0.13), 0 20px 56px rgba(0, 0, 0, 0.62);
-  animation: none;
 }
 /* 皮肤：奶油 / 毛玻璃（默认纯黑最像灵动岛） */
 .dz-island[data-skin='cream'] {
@@ -209,7 +212,52 @@ const STYLES = `
   height: 1px;
   background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.18), transparent);
   pointer-events: none;
-  z-index: 2;
+  z-index: 3;
+}
+/* 岛面流光：一道很淡的渐变光带周期性扫过，像玻璃下的传感器反光 */
+.dz-bar::before {
+  content: '';
+  position: absolute;
+  position: absolute;
+  inset: -40%;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(closest-side, rgba(10, 132, 255, .30), transparent 70%),
+    radial-gradient(closest-side, rgba(90, 200, 250, .22), transparent 70%),
+    radial-gradient(closest-side, rgba(191, 90, 242, .18), transparent 70%);
+  background-size: 55% 90%, 48% 80%, 60% 95%;
+  background-position: 12% 30%, 78% 65%, 45% 90%;
+  background-repeat: no-repeat;
+  filter: blur(14px);
+  animation: dz-aurora 11s ease-in-out infinite alternate;
+  opacity: .9;
+}
+/* 上面那层扫光保留，但更亮一点、周期短一点 */
+.dz-island > .dz-bar { position: relative; z-index: 2; }
+.dz-island > .dz-panel { position: relative; z-index: 2; }
+.dz-island > .dz-foot { position: relative; z-index: 2; }
+.dz-quick { position: relative; z-index: 2; }
+.dz-bar::after {
+  content: '';
+  position: absolute;
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  background: linear-gradient(105deg,
+    transparent 34%,
+    rgba(255, 255, 255, .07) 46%,
+    rgba(255, 255, 255, .16) 50%,
+    rgba(255, 255, 255, .07) 54%,
+    transparent 66%);
+  background-size: 260% 100%;
+  background-position: 180% 0;
+  animation: dz-shimmer 5.5s cubic-bezier(.4, 0, .2, 1) infinite;
+}
+/* 展开时整块岛做一次轻微挤压回弹，而不是单纯变宽 */
+.dz-island[data-expanded='true'] {
+  animation: dz-morph .46s cubic-bezier(.32, 1.4, .5, 1);
 }
 
 /* ── 收起态一行 ───────────────────────────────────── */
@@ -226,6 +274,8 @@ const STYLES = `
   padding: 0 16px;
 }
 .dz-title {
+  position: relative;
+  z-index: 1;
   flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
@@ -255,13 +305,18 @@ const STYLES = `
   background: var(--dz-green);
   box-shadow: 0 0 0 0 color-mix(in srgb, var(--dz-green) 55%, transparent);
 }
-.dz-dot[data-live='true'] { animation: dz-pulse 2.2s ease-out infinite; }
+.dz-dot[data-live='true'] {
+  box-shadow: 0 0 0 0 rgba(48, 209, 88, .5);
+  animation: dz-pulse 2.2s ease-out infinite, dz-ripple 2.2s ease-out infinite .3s;
+}
 .dz-dot[data-tone='warn'] { background: var(--dz-orange); }
 .dz-dot[data-tone='alert'] { background: var(--dz-red); }
 .dz-dot[data-tone='idle'] { background: var(--dz-3); animation: none; box-shadow: none; }
 
 /* 上下文占用：环 + 数字 */
 .dz-usage {
+  position: relative;
+  z-index: 1;
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
@@ -276,6 +331,13 @@ const STYLES = `
 .dz-ring circle { fill: none; stroke-width: 2.8; }
 .dz-ring .bg { stroke: var(--dz-fill-2); }
 .dz-ring .fg { stroke: var(--dz-accent); stroke-linecap: round; transition: stroke-dasharray .5s ease; }
+.dz-ring .orbit {
+  fill: #fff;
+  filter: drop-shadow(0 0 3px var(--dz-accent));
+  transform-origin: 7.5px 7.5px;
+  animation: dz-orbit 3.4s linear infinite;
+}
+.dz-usage b { position: relative; }
 
 /* 小标 / 角标 */
 .dz-pill {
@@ -335,6 +397,23 @@ const STYLES = `
   border-radius: 16px;
   background: var(--dz-fill);
 }
+/* 展开时各分区依次淡入上滑，像灵动岛把内容"吐"出来 */
+.dz-island[data-expanded='true'] .dz-body > .dz-section,
+.dz-island[data-expanded='true'] .dz-quick > .dz-section,
+.dz-island[data-expanded='true'] .dz-foot {
+  animation: dz-stagger-in .34s cubic-bezier(.22, 1.12, .36, 1) both;
+}
+.dz-island[data-expanded='true'] .dz-body > .dz-section:nth-child(1) { animation-delay: .02s; }
+.dz-island[data-expanded='true'] .dz-body > .dz-section:nth-child(2) { animation-delay: .04s; }
+.dz-island[data-expanded='true'] .dz-body > .dz-section:nth-child(3) { animation-delay: .06s; }
+.dz-island[data-expanded='true'] .dz-body > .dz-section:nth-child(4) { animation-delay: .08s; }
+.dz-island[data-expanded='true'] .dz-body > .dz-section:nth-child(5) { animation-delay: .10s; }
+.dz-island[data-expanded='true'] .dz-quick > .dz-section { animation-delay: .12s; }
+.dz-island[data-expanded='true'] .dz-foot { animation-delay: .14s; }
+/* 动画被关闭或异常中断时，内容必须仍然可见 */
+.dz-island[data-expanded='true'] .dz-body > .dz-section,
+.dz-island[data-expanded='true'] .dz-quick > .dz-section,
+.dz-island[data-expanded='true'] .dz-foot { opacity: 1; }
 .dz-section-head {
   display: flex;
   align-items: center;
@@ -420,8 +499,11 @@ const STYLES = `
   display: block;
   height: 100%;
   border-radius: 999px;
-  background: linear-gradient(90deg, var(--dz-blue), #5ac8fa);
+  background:
+    linear-gradient(100deg, transparent 20%, rgba(255,255,255,.55) 50%, transparent 80%) 0 0 / 60% 100% no-repeat,
+    linear-gradient(90deg, var(--dz-blue), #5ac8fa);
   transition: width .55s cubic-bezier(.32, 1.2, .5, 1);
+  animation: dz-meter-flow 2.6s linear infinite;
 }
 .dz-meter[data-tone='warn'] > i { background: linear-gradient(90deg, var(--dz-orange), #ffd60a); }
 .dz-meter[data-tone='alert'] > i { background: linear-gradient(90deg, var(--dz-red), #ff6961); }
@@ -452,17 +534,157 @@ const STYLES = `
 
 /* 岛仔：小生物（保留岛仔的灵魂，配色跟着 iOS 走） */
 .dz-pet {
+  position: relative;
+  z-index: 1;
   flex: 0 0 auto;
   width: 21px;
   height: 21px;
   overflow: visible;
 }
-.dz-pet .body { fill: var(--dz-accent); opacity: .95; }
-.dz-pet .eye { fill: #fff; transform-origin: center; animation: dz-blink 5.2s infinite; }
+.dz-pet .body {
+  fill: var(--dz-accent);
+  opacity: .95;
+  transform-origin: 12px 12px;
+  animation: dz-pet-breathe 2.8s ease-in-out infinite;
+}
+.dz-pet .speech {
+  fill: #fff;
+  opacity: 0;
+  transform-origin: 20.5px 6.5px;
+}
+.dz-pet[data-live='true'] .speech { animation: dz-speech 3.1s ease-in-out infinite; }
+.dz-pet .eyes { transform-origin: 12px 12px; }
+.dz-pet .eye {
+  fill: #fff;
+  transform-origin: center;
+  animation: dz-blink 5.2s infinite, dz-eye-shift 4s ease-in-out infinite;
+}
+.dz-pet[data-live='true'] .body { animation: dz-pet-breathe 1.5s ease-in-out infinite, dz-pet-squish 3.1s ease-in-out infinite; }
 .dz-pet[data-tone='idle'] .body { fill: var(--dz-3); opacity: .7; }
 .dz-pet[data-tone='warn'] .body { fill: var(--dz-orange); }
 .dz-pet[data-tone='alert'] .body { fill: var(--dz-red); }
 .dz-pet[data-live='true'] { animation: dz-bob 3s ease-in-out infinite; }
+
+
+
+@keyframes dz-speech {
+  0%, 70%, 100% { opacity: 0; transform: scale(.3); }
+  78%  { opacity: .9; transform: scale(1); }
+  90%  { opacity: 0; transform: scale(1.5) translateY(-2px); }
+}
+
+/* 两端传感器光晕：静态也能看见的小彩斑，缓慢明灭 */
+.dz-sensor {
+  position: absolute;
+  top: 50%;
+  width: 7px; height: 7px;
+  margin-top: -3.5px;
+  border-radius: 50%;
+  z-index: 1;
+  pointer-events: none;
+  animation: dz-sensor 3.2s ease-in-out infinite;
+}
+.dz-sensor[data-side='left'] {
+  left: 6px;
+  background: radial-gradient(circle, rgba(90, 200, 250, .9), rgba(10, 132, 255, 0) 70%);
+}
+.dz-sensor[data-side='right'] {
+  right: 6px;
+  background: radial-gradient(circle, rgba(191, 90, 242, .85), rgba(191, 90, 242, 0) 70%);
+  animation-delay: 1.1s;
+}
+/* 在跑时的三个思考点 */
+.dz-thinking {
+  position: relative;
+  z-index: 1;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: 12px;
+  padding: 0 1px;
+}
+.dz-thinking i {
+  width: 3px; height: 3px;
+  border-radius: 50%;
+  background: var(--dz-green);
+  animation: dz-think 1.15s ease-in-out infinite;
+}
+.dz-thinking i:nth-child(2) { animation-delay: .16s; }
+.dz-thinking i:nth-child(3) { animation-delay: .32s; }
+
+@keyframes dz-sensor {
+  0%, 100% { opacity: .35; transform: scale(.85); }
+  50%      { opacity: 1; transform: scale(1.25); }
+}
+@keyframes dz-think {
+  0%, 60%, 100% { transform: translateY(0); opacity: .45; }
+  30%           { transform: translateY(-3px); opacity: 1; }
+}
+
+@keyframes dz-aurora {
+  0%   { background-position: 8% 25%, 82% 70%, 40% 92%; transform: rotate(0deg) scale(1); }
+  50%  { background-position: 30% 60%, 60% 30%, 75% 75%; transform: rotate(8deg) scale(1.08); }
+  100% { background-position: 70% 35%, 20% 80%, 15% 25%; transform: rotate(-6deg) scale(.96); }
+}
+@keyframes dz-glow {
+  0%, 100% { box-shadow: 0 0 0 .5px rgba(255,255,255,.1), 0 10px 34px rgba(0,0,0,.5), 0 0 14px rgba(10,132,255,.12); }
+  50%      { box-shadow: 0 0 0 .5px rgba(255,255,255,.16), 0 10px 34px rgba(0,0,0,.5), 0 0 26px rgba(10,132,255,.30); }
+}
+@keyframes dz-pet-breathe {
+  0%, 100% { transform: scale(1, 1); }
+  50%      { transform: scale(1.06, .94); }
+}
+@keyframes dz-pet-squish {
+  0%, 88%, 100% { transform: scale(1, 1) rotate(0deg); }
+  92%           { transform: scale(1.12, .86) rotate(-4deg); }
+  96%           { transform: scale(.94, 1.08) rotate(3deg); }
+}
+@keyframes dz-eye-shift {
+  0%, 100% { transform: translateX(0); }
+  35%      { transform: translateX(.7px); }
+  65%      { transform: translateX(-.7px); }
+}
+@keyframes dz-orbit {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+@keyframes dz-shimmer {
+  0%   { background-position: 180% 0; opacity: 0; }
+  8%   { opacity: .85; }
+  42%  { background-position: -80% 0; opacity: .85; }
+  55%, 100% { background-position: -80% 0; opacity: 0; }
+}
+@keyframes dz-morph {
+  0%   { transform: scale(.97, .93); }
+  55%  { transform: scale(1.012, 1.018); }
+  100% { transform: scale(1, 1); }
+}
+@keyframes dz-stagger-in {
+  from { opacity: 0; filter: blur(5px); transform: translateY(14px) scale(.97); }
+  60%  { filter: blur(0); }
+  to   { opacity: 1; filter: blur(0); transform: translateY(0) scale(1); }
+}
+@keyframes dz-ripple {
+  0%   { box-shadow: 0 0 0 0 rgba(48, 209, 88, .45), 0 0 0 0 rgba(48, 209, 88, .25); }
+  70%  { box-shadow: 0 0 0 5px rgba(48, 209, 88, 0), 0 0 0 9px rgba(48, 209, 88, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(48, 209, 88, 0), 0 0 0 0 rgba(48, 209, 88, 0); }
+}
+@keyframes dz-meter-flow {
+  from { background-position: -60% 0, 0 0; }
+  to   { background-position: 160% 0, 0 0; }
+}
+@keyframes dz-tap {
+  0%   { opacity: .5; transform: scale(0) translate(-50%, -50%); }
+  100% { opacity: 0; transform: scale(2.2) translate(-50%, -50%); }
+}
+/* 内容切换：标题/数值变化时轻微淡切 */
+@keyframes dz-value-in {
+  from { opacity: .35; transform: translateY(-3px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.dz-usage b { animation: dz-value-in .4s ease-out; }
 
 @keyframes dz-pulse {
   0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--dz-green) 55%, transparent); }
@@ -503,7 +725,21 @@ const STYLES = `
   transition: background-color .16s ease, transform .16s cubic-bezier(.32, 1.4, .5, 1);
 }
 .dz-action:hover:not(:disabled) { background: rgba(255, 255, 255, 0.18); transform: translateY(-1px); }
-.dz-action:active:not(:disabled) { transform: scale(.96); }
+.dz-action:active:not(:disabled) { transform: scale(.94); }
+.dz-action { position: relative; overflow: hidden; }
+.dz-action::after {
+  content: '';
+  position: absolute;
+  width: 60px; height: 60px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, .22);
+  opacity: 0;
+  transform: scale(0) translate(-50%, -50%);
+  pointer-events: none;
+}
+.dz-action:active:not(:disabled)::after {
+  animation: dz-tap .45s ease-out;
+}
 .dz-action:disabled { opacity: .38; cursor: default; }
 
 .dz-quick {
@@ -549,7 +785,25 @@ const STYLES = `
 .dz-root[data-motion-spring='off'] .dz-panel { --dz-panel-spring: ease; }
 .dz-root[data-motion-bob='off'] .dz-pet[data-live='true'] { animation: none !important; }
 .dz-root[data-motion-blink='off'] .dz-pet .eye { animation: none !important; }
-.dz-root[data-motion-pulse='off'] .dz-dot[data-live='true'] { animation: none !important; box-shadow: none; }
+.dz-root[data-motion-pulse='off'] .dz-dot[data-live='true'] { animation: none !important; box-shadow: none !important; }
+.dz-root[data-motion-pulse='off'] .dz-sensor,
+.dz-root[data-motion-pulse='off'] .dz-thinking i { animation: none !important; opacity: .6; }
+.dz-root[data-motion-pulse='off'] .dz-island { animation-name: dz-drop; }
+.dz-root[data-motion-bob='off'] .dz-island,
+.dz-root[data-motion-bob='off'] .dz-island[data-expanded='true'] { animation-name: dz-drop; animation-iteration-count: 1; }
+.dz-root[data-motion-pulse='off'] .dz-island { animation-name: dz-drop; animation-iteration-count: 1; }
+.dz-root[data-motion-spring='off'] .dz-bar::before,
+.dz-root[data-motion-spring='off'] .dz-bar::after { animation: none !important; opacity: 0; }
+.dz-root[data-motion-bob='off'] .dz-pet .speech { animation: none !important; opacity: 0; }
+.dz-root[data-motion-bob='off'] .dz-pet .body { animation: none !important; }
+.dz-root[data-motion-blink='off'] .dz-pet .eye { animation: none !important; }
+.dz-root[data-motion-pulse='off'] .dz-ring .orbit { animation: none !important; opacity: 0; }
+.dz-root[data-motion-spring='off'] .dz-meter > i { animation: none !important; }
+.dz-root[data-motion-spring='off'] .dz-body > .dz-section,
+.dz-root[data-motion-spring='off'] .dz-quick > .dz-section,
+.dz-root[data-motion-spring='off'] .dz-foot { animation: none !important; }
+.dz-root[data-motion-toast='off'] .dz-action::after { animation: none !important; }
+.dz-root[data-motion-toast='off'] .dz-usage b { animation: none !important; }
 .dz-root[data-motion-toast='off'] .dz-toast { animation: none !important; }
 .dz-root[data-motion-toast='off'] .dz-action { transition: none !important; }
 .dz-root[data-motion-spring='off'] .dz-skin,
@@ -719,6 +973,14 @@ const STYLES = `
 .dz-settings[data-motion-pulse='off'] .dz-settings-demo .dz-dot { animation: none !important; box-shadow: none; }
 
 @media (prefers-reduced-motion: reduce) {
+  .dz-root[data-motion-reduce='on'] .dz-sensor,
+.dz-root[data-motion-reduce='on'] .dz-thinking i,
+.dz-root[data-motion-reduce='on'] .dz-island::after,
+    .dz-root[data-motion-reduce='on'] .dz-meter > i,
+  .dz-root[data-motion-reduce='on'] .dz-body > .dz-section,
+  .dz-root[data-motion-reduce='on'] .dz-quick > .dz-section,
+  .dz-root[data-motion-reduce='on'] .dz-foot,
+  .dz-root[data-motion-reduce='on'] .dz-usage b,
   .dz-root[data-motion-reduce='on'] .dz-island,
   .dz-root[data-motion-reduce='on'] .dz-dot,
   .dz-root[data-motion-reduce='on'] .dz-pet,
@@ -948,8 +1210,12 @@ function Pet({ tone }) {
       aria-hidden="true"
     >
       <rect className="body" x="2.5" y="5" width="19" height="14" rx="7" />
-      <circle className="eye" cx="9.5" cy="12" r="1.7" />
-      <circle className="eye" cx="14.5" cy="12" r="1.7" />
+      <g className="eyes">
+        <circle className="eye" cx="9.5" cy="12" r="1.7" />
+        <circle className="eye" cx="14.5" cy="12" r="1.7" />
+      </g>
+      {/* 在跑时嘴边冒一个小气泡，让岛仔看起来在"说话" */}
+      <circle className="speech" cx="20.5" cy="6.5" r="1.5" />
     </svg>
   );
 }
@@ -961,6 +1227,13 @@ function Ring({ percent }) {
   const filled = (clamped / 100) * circumference;
   return (
     <svg className={`${CLS}-ring`} viewBox="0 0 15 15" aria-hidden="true">
+      <defs>
+        <linearGradient id="dzRingGradient" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stopColor="#0a84ff" />
+          <stop offset="55%" stopColor="#5ac8fa" />
+          <stop offset="100%" stopColor="#bf5af2" />
+        </linearGradient>
+      </defs>
       <circle className="bg" cx="7.5" cy="7.5" r={radius} />
       <circle
         className="fg"
@@ -969,6 +1242,9 @@ function Ring({ percent }) {
         r={radius}
         strokeDasharray={`${filled} ${circumference - filled}`}
       />
+      <g className="orbit">
+        <circle cx="7.5" cy="1.6" r="1.3" />
+      </g>
     </svg>
   );
 }
@@ -1181,7 +1457,10 @@ function Island() {
           }
         }}
       >
+        <span className={`${CLS}-aurora`} aria-hidden="true" />
+        <span className={`${CLS}-shimmer`} aria-hidden="true" />
         <div className={`${CLS}-bar`}>
+          <span className={`${CLS}-sensor`} data-side="left" aria-hidden="true" />
           <Pet tone={tone} />
           <span className={`${CLS}-title`} title={title}>
             {title}
@@ -1201,6 +1480,12 @@ function Island() {
           {approvals.length > 0 ? (
             <span className={`${CLS}-badge`}>{approvals.length}</span>
           ) : null}
+          {runningCount > 0 ? (
+            <span className={`${CLS}-thinking`} aria-hidden="true">
+              <i /><i /><i />
+            </span>
+          ) : null}
+          <span className={`${CLS}-sensor`} data-side="right" aria-hidden="true" />
         </div>
 
         <div className={`${CLS}-panel`}>
