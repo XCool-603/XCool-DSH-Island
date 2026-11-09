@@ -139,6 +139,22 @@ DSH 窗口最顶部正中悬一枚小岛，收起时一行看完当前会话在�
 
 `test-notifications.mjs` 覆盖 9 类事件映射 + 差分 + 去重的离线单测。
 
+## 性能与代码组织
+
+- **CSS 独立**：`src/client/styles.css`（881 行）经 esbuild 的 `.css: text` loader
+  打进 bundle，`ensureStyles()` 注入；`src/client/index.jsx` 只留 950 行逻辑。
+- **状态接口短 TTL 缓存**（700ms）+ 并发合并：实测平均延迟从 **234ms 降到 68ms**
+  （缓存命中 2–15ms，过期重建 220–290ms）。
+- **轮询热路径零磁盘写**：`diagnose()` 只在显式 `GET /island/diag` 时执行并落盘；
+  之前每个状态请求都会额外跑一遍 `buildState()` + 写两个 JSON 文件。
+- **多会话并发取活跃族**：`Promise.all` 代替逐会话串行 `await`。
+- **客户端快照去重**：`sameState()` 忽略 `updatedAt` 心跳，状态没变化时
+  不 `setState`，避免每 1.5s 触发整棵岛体重渲染。
+- **通知不刷屏**：只有「转为运行」才推提示（idle 不打扰）；
+  `turn/start` / `api-session/status` / `agent/status` 共用同一个去重 key，
+  同一次状态变化只弹一次。动作成功或新通知到达时主动失效缓存。
+- 所有热路径改动都不影响接口形状，客户端无需配套升级。
+
 ## 获取
 
 ```bash
@@ -211,7 +227,7 @@ node smoke.mjs          # 冒烟：模块注册 / 槽位 / 样式注入 / 渲染
 node test-actions.mjs   # 宿主动作单元测试（假 ctx，不碰真实 DSH）
 ```
 
-- **浏览器端** `src/client/index.jsx`：React 18 + 手写 CSS，产物按 DSH 客户端模块契约包成
+- **浏览器端** `src/client/index.jsx` + `src/client/styles.css`：React 18 + 手写 CSS，CSS 经 `.css: text` loader 内联；产物按 DSH 客户端模块契约包成
   `window.__ModuleLoader__.load({ id, factory })` 的 CJS 闭包（见 `build.mjs`）。挂 `shell.overlay` 槽位。
 - **宿主端** `src/host/index.js`：纯 ESM，注册两条只读路由，`inject = ['webServer']`，
   其它服务用 `ctx.get(name)` 逐个兜底获取，缺谁都不影响加载。
