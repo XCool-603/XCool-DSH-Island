@@ -1,0 +1,7 @@
+# xcool-dsh-island bundle patch
+#
+# 作为 bundle 装进 profile 后，dsh 启动时自动叠加本 patch，插入岛的宿主端条目。
+# 顺序：dsh-base → 本 patch → profile cordis.patch.yml → --patch
+- insert:
+    - id: island
+      name: 'xcool-dsh-island'
