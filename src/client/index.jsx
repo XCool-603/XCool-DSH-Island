@@ -556,6 +556,61 @@ const STYLES = `
 .dz-root[data-motion-spring='off'] .dz-meter > i { transition: none !important; }
 /* 跟随系统：只在用户允许时生效 */
 
+
+/* ── 岛内动效快捷面板 ────────────────────────────── */
+.dz-action[data-active='true'] {
+  background: var(--dz-blue);
+  border-color: var(--dz-blue);
+  color: #fff;
+}
+.dz-motion-panel {
+  margin-top: 8px;
+  padding: 10px 11px 8px;
+  border-radius: 12px;
+  background: var(--dz-fill);
+  -webkit-app-region: no-drag;
+  animation: dz-drop .32s cubic-bezier(.32, 1.3, .5, 1);
+}
+.dz-motion-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  font-size: 11px;
+  color: var(--dz-2);
+}
+.dz-motion-head b { font-weight: 600; color: var(--dz-label); font-size: 11.5px; }
+.dz-motion-head button {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--dz-2);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.dz-motion-head button:hover { color: var(--dz-label); }
+.dz-motion-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 4px 10px;
+}
+.dz-motion-item {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 24px;
+  font-size: 11.5px;
+  color: var(--dz-label);
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+}
+.dz-motion-item input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.dz-motion-item .dz-switch { width: 30px; height: 18px; }
+.dz-motion-item .dz-switch::after { width: 14px; height: 14px; }
+.dz-motion-item input:checked + .dz-switch::after { transform: translateX(12px); }
+.dz-motion-panel[data-motion-drop='off'] { animation: none; }
+
 /* ── 设置页：动效开关 ─────────────────────────────── */
 .dz-settings {
   display: flex;
@@ -958,7 +1013,8 @@ function Island() {
   const { state, reachable } = useIslandState();
   const { toast, run, show } = useAction();
   const position = usePosition();
-  const { motion } = useMotion();
+  const { motion, update: updateMotion, reset: resetMotion } = useMotion();
+  const [showMotion, setShowMotion] = useState(false);
   // 离线预览页 ?expand=1 强制展开；生产环境不带该参数
   const [pinned, setPinned] = useState(() => {
     try {
@@ -1288,7 +1344,34 @@ function Island() {
                     }}>
                     ⌖ 复位
                   </button>
+                  <button type="button" className={`${CLS}-action`}
+                    data-active={showMotion ? 'true' : 'false'}
+                    onClick={(e) => { e.stopPropagation(); setShowMotion((v) => !v); }}>
+                    ⚙ 动效
+                  </button>
                 </div>
+
+                {showMotion ? (
+                  <div className={`${CLS}-motion-panel`} data-no-drag {...motionAttrs(motion)}>
+                    <div className={`${CLS}-motion-head`}>
+                      <b>动效开关</b>
+                      <button type="button" onClick={() => resetMotion()}>恢复默认</button>
+                    </div>
+                    <div className={`${CLS}-motion-grid`}>
+                      {MOTION_DEFS.map((def) => (
+                        <label className={`${CLS}-motion-item`} key={def.key} title={def.hint}>
+                          <input
+                            type="checkbox"
+                            checked={motion[def.key] !== false}
+                            onChange={(event) => updateMotion(def.key, event.target.checked)}
+                          />
+                          <span className={`${CLS}-switch`} aria-hidden="true" />
+                          <span>{def.label}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
               </Section>
             </div>
 
