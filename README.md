@@ -67,6 +67,31 @@ DSH 窗口最顶部正中悬一枚小岛，收起时一行看完当前会话在�
 
 **明确不做**（见 research-island-actions.md 的风险清单）：不直写 `session.append('user/message')` 当发送、
 不带 `keepInbox` 的 cancel、静默改审批策略/模型选择、注册 `/api/*` 路由、宿主侧伪造 Electron clipboard。
+## 动效设置
+
+在 **设置 → 插件 → XCool-DSH灵动岛** 里可以逐项开关（iOS 风格开关，改动立即生效、保存到 localStorage）：
+
+| 开关 | 效果 |
+|---|---|
+| 入场弹入 | 首次出现时从上方轻轻落下 |
+| 展开弹性 | 悬停展开的回弹曲线（关掉后变成匀速） |
+| 在跑浮动 | 有会话运行时岛仔上下轻浮 |
+| 岛仔眨眼 | 小生物每隔几秒眨一次眼 |
+| 状态点呼吸 | 运行状态点向外扩散的光晕 |
+| 提示动画 | 操作回执弹出的缩放淡入 |
+| 悬停展开 | 关掉后**只能点击**岛体展开，鼠标扫过不再弹出面板 |
+| 跟随系统减少动效 | 系统开启「减少动态效果」时自动全关 |
+
+右上角「恢复默认」一键还原；底部有实时预览区，能直接看到眨眼/浮动/呼吸的效果。
+
+实现上，每个开关对应一个 `data-motion-*` 属性挂在岛体根节点上，CSS 里逐项用
+`animation: none` / `--dz-spring: ease` 精确关掉，不需要重新注入样式表。
+设置页与岛体通过 `CustomEvent('xcool-dsh-island:motion')` + `storage` 事件即时同步；
+配置写在 `localStorage['island.motion']`。
+
+> 没有走官方 `ctx.configForms`（那要宿主声明 `Config` schema、把值写进 Host 文档并处理
+> revision 冲突）。动效是纯本地视觉偏好，localStorage 更轻、零重启、无额外依赖。
+
 ## 获取
 
 ```bash
@@ -143,7 +168,7 @@ node test-actions.mjs   # 宿主动作单元测试（假 ctx，不碰真实 DSH�
   `window.__ModuleLoader__.load({ id, factory })` 的 CJS 闭包（见 `build.mjs`）。挂 `shell.overlay` 槽位。
 - **宿主端** `src/host/index.js`：纯 ESM，注册两条只读路由，`inject = ['webServer']`，
   其它服务用 `ctx.get(name)` 逐个兜底获取，缺谁都不影响加载。
-- **离线预览**：双击 `preview.html`（本地 React UMD + 假数据）；`preview.html?collapsed=1` 只看收起态。
+- **离线预览**：双击 `preview.html`；`?collapsed=1` 只看收起态、`?expand=1` 强制展开、`?settings=1` 单独看动效设置页。
 - **迭代**：改客户端代码后 `node build.mjs`，页面按 mtime 热替换，刷新即可看到；
   改宿主代码后摘掉 patch 里的 `insert` 再插回（或重启应用）才会重新加载。
 
