@@ -114,6 +114,31 @@ DSH 窗口最顶部正中悬一枚小岛，收起时一行看完当前会话在�
 所有效果都遵守 `prefers-reduced-motion`，且开关关闭时**不会残留半截动画**。
 错峰动画带 `opacity:1` 兜底：动画被关掉或异常中断时内容仍然可见。
 
+## 状态提示（运行中 / 完成 / 异常）
+
+岛会主动告诉你**状态变了**，不用一直盯着看。两条通道互为兜底：
+
+| 通道 | 来源 | 覆盖 |
+|---|---|---|
+| 全局事件 | `ctx.on('session/event')` 过滤 `turn/start`、`turn/end`、`tool/result.error`、`job/settled`、`command/done`；另收 `api-session/status`/`api-session/error`、`agent/status`、`agent/error`、`agent-loop/config-start-failed` | 轮次开始/结束（reason 直接区分完成·异常·中止）、工具失败、作业结算、命令结束、LLM 错误 |
+| 作业差分 | 每次 `/island/state` 读 `jobs.list()` 与上次快照对比（`JobStatus` = running / stopping / completed / killed / failed） | 事件没转发到宿主时仍能捕捉开始/完成/失败 |
+
+三类提示：
+
+| 类型 | 触发 | 颜色 |
+|---|---|---|
+| **运行中** | 轮次开始、作业注册、agent 转为 running | 蓝（图标旋转） |
+| **完成** | `turn/end reason=completed`、`job/settled`、`command/done kind=success`、作业转 completed | 绿 |
+| **异常** | `reason=error/blocked/max-tokens`、`tool/result.error`、作业 failed/killed、`api-session/error`、`agent/error` | 红 |
+
+**呈现**：
+- 检测到新 `seq` 时在岛上弹一条 toast（带标题 + 详情，一次最多 2 条防刷屏）
+- 展开面板顶部有「最近状态」区块，保留最近 3 条（带三色点和时间），错过 toast 也能翻
+- 首次加载只记水线**不回放历史**；宿主重启后 seq 变小会重新对齐
+- 同一事件 1.2 秒内去重，缓冲最多 8 条；所有监听逐个 try/catch，单个 handler 抛错不影响宿主事件分发
+
+`test-notifications.mjs` 覆盖 9 类事件映射 + 差分 + 去重的离线单测。
+
 ## 获取
 
 ```bash
