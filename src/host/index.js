@@ -38,10 +38,37 @@ const SNAPSHOT_FILE = `${DEBUG_DIR}\\dsh-island-state.json`;
 
 const isFn = (value) => typeof value === 'function';
 
+/** 快照短 TTL 缓存：状态接口开销约 200ms，1.5s 轮询里多个页面/请求复用同一份 */
+const SNAPSHOT_TTL_MS = 700;
+let cachedSnapshot = null;
+let cachedAt = 0;
+let inFlight = null;
+
 /** 通知收集器与作业状态快照：模块级单例，热重载后会重建 */
-const notifier = createNotifier();
+const notifier = createNotifier(() => {
+  cachedSnapshot = null;
+  cachedAt = 0;
+});
 const jobStatuses = new Map();
 let jobSampling = true;
+
+/** 取快照：TTL 内复用；并发请求合并成同一个 Promise */
+async function currentSnapshot(ctx) {
+  const now = Date.now();
+  if (cachedSnapshot && now - cachedAt < SNAPSHOT_TTL_MS) return cachedSnapshot;
+  if (inFlight) return inFlight;
+  inFlight = (async () => {
+    try {
+      const snapshot = await safeAsync(() => buildState(ctx), { ok: false });
+      cachedSnapshot = snapshot;
+      cachedAt = Date.now();
+      return snapshot;
+    } finally {
+      inFlight = null;
+    }
+  })();
+  return inFlight;
+}
 
 /** 取不到就返回 fallback，绝不抛 */
 function safe(fn, fallback) {
@@ -319,17 +346,17 @@ async function buildState(ctx) {
     return row.id === '' ? '' : deriveTitleFromSession(ctx, row.id);
   };
 
-  // 每个在跑的会话各出一行，带上它自己的活跃族（turn / job / subagent / schedule）
-  const jobs = [];
-  for (const row of runningRows.slice(0, 4)) {
-    const families = await readActivity(ctx, row.id);
-    jobs.push({
+  // 每个在跑的会话各出一行；并发取活跃族，避免多会话时串行拖慢轮询
+  const activityRows = runningRows.slice(0, 4);
+  const families = await Promise.all(
+    activityRows.map((row) => safeAsync(() => readActivity(ctx, row.id), [])),
+  );
+  const jobs = activityRows.map((row, index) => ({
       id: row.id,
       title: titleOf(row) || '未命名会话',
-      kinds: families.map((family) => family.title),
+      kinds: families[index].map((family) => family.title),
       elapsed: '',
-    });
-  }
+  }));
 
   const currentTitle = titleOf(current);
   const schedule = current === null ? [] : await readSchedule(ctx, current.id);
@@ -460,7 +487,7 @@ function projectionPreview(row) {
   return out;
 }
 
-async function diagnose(ctx) {
+async function diagnose(ctx, { includeState = true } = {}) {
   const services = {};
   for (const key of PROBE_SERVICES) {
     const value = service(ctx, key);
@@ -505,7 +532,7 @@ async function diagnose(ctx) {
         }
       : null,
     projectionPreview: rows[0] ? projectionPreview(rows[0].raw) : null,
-    state: await safeAsync(() => buildState(ctx), null),
+    state: includeState ? await safeAsync(() => buildState(ctx), null) : null,
   };
 }
 
@@ -526,7 +553,6 @@ function dumpTo(file, value) {
 export function apply(ctx) {
   const logger = ctx.logger ?? console;
   const disposers = [];
-  let lastDump = 0;
 
   safe(() => logger.info?.(`island: 状态接口就绪 ${STATE_PATH}`));
   // 挂全局事件监听（逐个 try/catch；缺事件不影响插件）
@@ -534,8 +560,8 @@ export function apply(ctx) {
   const detach = notifier.attach(ctx, EVENT_DEFINITIONS);
   ctx.effect?.(() => () => detach(), 'island.notifications');
   disposers.push(detach);
-  // 装载即留痕：没有浏览器也能确认宿主端接上了
-  void (async () => dumpTo(DIAG_FILE, await diagnose(ctx)))();
+  // 装载即留痕（一次性，不在轮询路径上）
+  void (async () => dumpTo(DIAG_FILE, await diagnose(ctx, { includeState: false })))();
 
   disposers.push(
     ctx.webServer.register({
@@ -546,14 +572,9 @@ export function apply(ctx) {
         if (req.method !== 'GET' && req.method !== 'HEAD') {
           return sendJson(res, 405, { ok: false, error: 'method not allowed' });
         }
+        // 热路径：只取一次快照（TTL 缓存 + 并发合并），不写磁盘、不跑诊断
         void (async () => {
-          const snapshot = await safeAsync(() => buildState(ctx), { ok: false });
-          const now = Date.now();
-          if (now - lastDump > 2000) {
-            lastDump = now;
-            dumpTo(SNAPSHOT_FILE, snapshot);
-            dumpTo(DIAG_FILE, await diagnose(ctx));
-          }
+          const snapshot = await currentSnapshot(ctx);
           sendJson(res, 200, snapshot);
         })();
         return undefined;
@@ -583,6 +604,11 @@ export function apply(ctx) {
           const rejection = validateAction(ctx, payload);
           if (rejection) return sendJson(res, 422, { ok: false, message: rejection });
           const result = await runAction(ctx, payload);
+          // 成功的写动作会让旧快照过期，下一次轮询立刻看到新状态
+          if (result?.ok) {
+            cachedSnapshot = null;
+            cachedAt = 0;
+          }
           return sendJson(res, result.ok ? 200 : 422, result);
         })();
         return undefined;
@@ -597,10 +623,13 @@ export function apply(ctx) {
       handler: (req, res) => {
         if (!trusted(req)) return sendJson(res, 403, { ok: false, error: 'forbidden' });
         void (async () => {
-          sendJson(res, 200, {
-            ...(await safeAsync(() => diagnose(ctx), { ok: false })),
-            actions: ACTION_NAMES,
-          });
+          const diag = await safeAsync(() => diagnose(ctx), { ok: false });
+          // 显式诊断时才落盘（含状态快照），轮询热路径完全不碰磁盘
+          void (async () => {
+            dumpTo(DIAG_FILE, diag);
+            dumpTo(SNAPSHOT_FILE, diag?.state ?? { ok: false });
+          })();
+          sendJson(res, 200, { ...diag, actions: ACTION_NAMES });
         })();
         return undefined;
       },
