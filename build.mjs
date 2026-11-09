@@ -41,6 +41,7 @@ const options = {
   footer: {
     js: `return module.exports; } });`,
   },
+  loader: { '.css': 'text' },
   logLevel: 'info',
 };
 
