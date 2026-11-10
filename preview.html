@@ -88,6 +88,7 @@
   };
 
   // 3. 假数据：让面板有内容可看
+  let __toastTick = 0;
   const MOCK = {
     ok: true,
     updatedAt: Date.now(),
@@ -121,7 +122,21 @@
   const realFetch = window.fetch;
   window.fetch = async (url) => {
     if (String(url).includes('/island/state')) {
-      return { ok: true, status: 200, json: async () => MOCK };
+      const toastMode = new URLSearchParams(location.search).get('toast') === '1';
+      __toastTick += 1;
+      const data = { ...MOCK };
+      if (toastMode && __toastTick > 1) {
+        // __ISLAND_TOAST_DELAY
+        data.notifications = {
+          seq: 1,
+          items: [{
+            seq: 1, id: 'preview-1', kind: 'success', title: '已完成',
+            detail: 'Move-Item D:\\work\\DSH\\shot-current.mjs shot-current.ps1 -Force',
+            at: Date.now(),
+          }],
+        };
+      }
+      return { ok: true, status: 200, json: async () => data };
     }
     return realFetch ? realFetch(url) : Promise.reject(new Error('offline'));
   };
