@@ -123,16 +123,6 @@ function projection(row, key) {
 }
 
 /** todos 投影：{ items: [{ content, status }] } | 数组 | null */
-function readTodos(row) {
-  const value = projection(row, 'todos');
-  const items = Array.isArray(value) ? value : Array.isArray(value?.items) ? value.items : [];
-  return items
-    .map((item) => ({
-      content: String(item?.content ?? '').trim(),
-      done: item?.status === 'completed',
-    }))
-    .filter((item) => item.content.length > 0);
-}
 
 /** contextPressure 投影：{ projectedTokens, pressureTokens, contextWindow } */
 function readUsage(row) {
@@ -167,7 +157,6 @@ function normalizeRow(row) {
     title: clipTitle(row?.title ?? row?.name ?? ''),
     running: row?.running === true,
     updatedAt: Number(row?.updatedAt ?? 0),
-    todos: readTodos(row),
     usage: readUsage(row),
     model: readModel(row),
     /** 原始行留着给自检用，不进快照响应 */
@@ -196,7 +185,6 @@ function fallbackRows(ctx) {
       updatedAt: Number(safe(() => header?.updatedAt, 0)) || seq,
       projections: {
         values: {
-          todos: stateOf(session, 'todos'),
           contextPressure: stateOf(session, 'contextPressure'),
           modelSelection: stateOf(session, 'modelSelection'),
         },
@@ -282,22 +270,6 @@ async function readActivity(ctx, sessionId) {
 
 /* ── 日程 ─────────────────────────────────────────── */
 
-async function readSchedule(ctx, sessionId) {
-  const svc = service(ctx, 'schedule');
-  if (!svc || !isFn(svc.list) || sessionId === '') return [];
-  const rows = await safeAsync(() => svc.list({ sessionId }), null);
-  if (!Array.isArray(rows)) return [];
-  return rows
-    .map((task) => ({
-      id: String(task?.id ?? ''),
-      title: clipTitle(task?.title ?? task?.name ?? ''),
-      at: Number(task?.scheduledAt ?? task?.nextAt ?? 0),
-    }))
-    .filter((task) => task.title.length > 0)
-    .sort((a, b) => (a.at || Infinity) - (b.at || Infinity))
-    .slice(0, 3)
-    .map((task) => ({ id: task.id, title: task.title, when: describeWhen(task.at) }));
-}
 
 function describeWhen(at) {
   if (!Number.isFinite(at) || at <= 0) return '';
@@ -359,7 +331,6 @@ async function buildState(ctx) {
   }));
 
   const currentTitle = titleOf(current);
-  const schedule = current === null ? [] : await readSchedule(ctx, current.id);
 
   return {
     ok: true,
@@ -377,9 +348,7 @@ async function buildState(ctx) {
           },
     usage: current?.usage ?? null,
     tokens: current?.usage?.used ?? null,
-    todos: current?.todos ?? [],
     jobs,
-    schedule,
     approvals: [],
     notifications: notifier.snapshot(),
   };
