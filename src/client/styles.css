@@ -638,7 +638,9 @@
 
 /* ── toast ────────────────────────────────────────── */
 .dz-toast {
+  align-self: flex-end;
   margin-top: 8px;
+  margin-right: 4px;
   padding: 6px 13px;
   border-radius: 999px;
   font-size: 11.5px;
@@ -651,7 +653,7 @@
 }
 .dz-toast[data-ok='false'] { background: rgba(120, 32, 32, 0.95); }
 /* 三类状态提示：运行中=蓝、完成=绿、异常=红 */
-.dz-toast { gap: 8px; max-width: 360px; }
+.dz-toast { gap: 8px; max-width: 268px; }
 .dz-toast[data-kind='success'] { background: rgba(20, 78, 46, 0.95); }
 .dz-toast[data-kind='error']   { background: rgba(120, 32, 32, 0.96); }
 .dz-toast[data-kind='running'] { background: rgba(16, 52, 96, 0.95); }
@@ -671,6 +673,8 @@
 .dz-toast-copy { display: flex; flex-direction: column; min-width: 0; }
 .dz-toast-copy b { font-weight: 600; }
 .dz-toast-copy small { opacity: .72; font-size: 10.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 详情里的命令名用等宽，且与标题分行更清楚 */
+.dz-toast-copy small { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 @keyframes dz-spin { from { transform: rotate(0); } to { transform: rotate(360deg); } }
 
 /* ── 拖动 ─────────────────────────────────────────── */
