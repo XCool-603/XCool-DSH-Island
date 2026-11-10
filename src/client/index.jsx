@@ -38,6 +38,7 @@ const MOTION_DEFS = [
   { key: 'toast',  label: '提示动画',     hint: '操作回执弹出的缩放淡入',         default: true },
   { key: 'hover',  label: '悬停展开',     hint: '关闭后只能点击岛体展开',         default: true },
   { key: 'reduce', label: '跟随系统减少动效', hint: '系统开启「减少动态效果」时自动全关', default: true },
+  { key: 'notify', label: '状态提示',     hint: '完成时与异常时弹出提示；关闭后只在面板里留记录', default: true },
 ];
 
 const MOTION_KEY = `${NS}.motion`;
@@ -193,12 +194,29 @@ function useIslandState() {
 
 /** 调用宿主动作；结果以 toast 形式反馈，失败也不打断岛体 */
 
+/** 把可能是命令全文的详情压成一行：路径只留文件名，超长省略 */
+function compactDetail(text, max = 42) {
+  let s = String(text ?? '').replace(/\s+/g, ' ').trim();
+  if (!s) return '';
+  // 命令常带多个路径：取最后一个带脚本后缀的 token，只显示文件名
+  const tokens = s.split(/[\s"']+/).filter(Boolean);
+  let picked = '';
+  for (const token of tokens) {
+    const m = token.match(/([^\\/\s]+\.(?:ps1|mjs|js|ts|cmd|bat|py|sh|exe))$/i);
+    if (m) picked = m[1];
+  }
+  if (picked) s = picked;
+  else if (s.length > max) s = s.slice(0, max - 1) + '…';
+  return s;
+}
+
 /** 监听宿主下发的通知流：只弹「本次会话没见过」的，刷新页面不重放历史 */
-function useNotifications(state, show) {
+function useNotifications(state, show, motion) {
   const lastSeq = useRef(null);
   const showRef = useRef(show);
   showRef.current = show;
   const latest = state?.notifications?.seq ?? null;
+  const notifyEnabled = motion?.notify !== false;
 
   useEffect(() => {
     const payload = state?.notifications;
@@ -221,15 +239,15 @@ function useNotifications(state, show) {
     lastSeq.current = payload.seq;
     if (fresh.length === 0) return;
 
-    // 一次最多弹 2 条，避免批量结算刷屏
-    for (const item of fresh.slice(-2)) {
-      const line = item.detail
-        ? `${item.title} · ${item.detail}`
-        : item.title || '状态更新';
-      const kind = item.kind === 'error' ? 'error' : item.kind === 'running' ? 'running' : 'success';
-      showRef.current(line, kind);
+    // 开关关闭时只推进水线，不弹
+    if (!notifyEnabled) return;
+    // 只弹「完成 / 异常」；「开始运行」交给岛体状态点表达，避免每跑一条命令就弹
+    const toastable = fresh.filter((item) => item.kind === 'success' || item.kind === 'error');
+    for (const item of toastable.slice(-2)) {
+      const detail = compactDetail(item.detail);
+      showRef.current(item.title || '状态更新', item.kind === 'error' ? 'error' : 'success', detail);
     }
-  }, [latest]);
+  }, [latest, notifyEnabled]);
 }
 
 function useAction() {
@@ -489,9 +507,9 @@ function readSkin() {
 function Island() {
   const { state, reachable } = useIslandState();
   const { toast, run, show } = useAction();
-  useNotifications(state, show);
   const position = usePosition();
   const { motion, update: updateMotion, reset: resetMotion } = useMotion();
+  useNotifications(state, show, motion);
   const [showMotion, setShowMotion] = useState(false);
   // 离线预览页 ?expand=1 强制展开；生产环境不带该参数
   const [pinned, setPinned] = useState(() => {
