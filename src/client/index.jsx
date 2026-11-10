@@ -122,9 +122,7 @@ const EMPTY_STATE = {
   busy: false,
   session: null,
   usage: null,
-  todos: [],
   jobs: [],
-  schedule: [],
   approvals: [],
 };
 
@@ -137,7 +135,7 @@ function sameState(a, b) {
   if (!a || !b) return false;
   const keys = [
     'ok', 'sessions', 'runningCount', 'busy', 'session',
-    'usage', 'tokens', 'todos', 'jobs', 'schedule', 'approvals',
+    'usage', 'tokens', 'jobs', 'approvals',
     'notificationsSeq',
   ];
   for (const key of keys) {
@@ -573,12 +571,9 @@ function Island() {
 
   const usagePercent = state.usage?.percent ?? null;
   const approvals = state.approvals ?? [];
-  const todos = state.todos ?? [];
   const jobs = state.jobs ?? [];
   const notices = (state.notifications?.items ?? []).slice(-3).reverse();
-  const schedule = state.schedule ?? [];
   const runningCount = state.runningCount ?? (state.busy ? 1 : 0);
-  const openTodos = todos.filter((item) => !item.done);
 
   // ── 客户端动作（不写会话日志，优先走 DSH 自己的正规路径） ──
   const openSession = (sessionId) => {
@@ -746,59 +741,7 @@ function Island() {
                 </Section>
               ) : null}
 
-              {approvals.length > 0 ? (
-                <Section title="待审批" extra={`${approvals.length}`}>
-                  {approvals.slice(0, 3).map((item, index) => (
-                    <div className={`${CLS}-row`} key={item.id ?? index}>
-                      <span className={`${CLS}-badge`}>!</span>
-                      <span className={`${CLS}-row-text`}>{item.title || '需要你的确认'}</span>
-                    </div>
-                  ))}
-                </Section>
-              ) : null}
 
-              <Section
-                title="待办"
-                extra={openTodos.length > 0 ? `${openTodos.length} 项未完成` : undefined}
-              >
-                {todos.length === 0 ? (
-                  <Empty>当前会话没有待办</Empty>
-                ) : (
-                  todos.slice(0, 5).map((item, index) => (
-                    <div className={`${CLS}-row`} key={index}>
-                      <span className={`${CLS}-check`} data-done={item.done ? 'true' : 'false'} />
-                      <span className={`${CLS}-row-text`} data-done={item.done ? 'true' : 'false'}>
-                        {item.content}
-                      </span>
-                    </div>
-                  ))
-                )}
-              </Section>
-
-              <Section title="日程">
-                {schedule.length === 0 ? (
-                  <Empty>没有临近的提醒</Empty>
-                ) : (
-                  schedule.slice(0, 3).map((item, index) => (
-                    <div className={`${CLS}-row`} key={item.id ?? index}>
-                      <span className={`${CLS}-row-sub`}>{item.when || ''}</span>
-                      <span className={`${CLS}-row-text`}>{item.title}</span>
-                      {item.id ? (
-                        <button
-                          type="button"
-                          className={`${CLS}-mini`}
-                          title="删除这条提醒"
-                          data-no-drag
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            void run('deleteReminder', { id: item.id });
-                          }}
-                        >✕</button>
-                      ) : null}
-                    </div>
-                  ))
-                )}
-              </Section>
 
               <Section title="额度">
                 {usagePercent === null ? (
