@@ -29,8 +29,6 @@ DSH 窗口最顶部正中悬一枚小岛，收起时一行看完当前会话在�
 |---|---|
 | 运行中 | **每个在跑的会话一行**，后面跟它自己的活跃族：正在处理 / 后台作业 / 子代理 / 定时任务 |
 | 待审批 | 需要你确认的工具调用（尚未接入，见「已知限制」） |
-| 待办 | 当前会话的 `todos` 投影，完成项划线（iOS 风格圆形勾选） |
-| 日程 | 本会话最近 3 条提醒，带「x 分钟后」 |
 | 额度 | 上下文占用水位条 + `已用 / 上限` |
 | 底栏 | 会话总数、token 数、三款皮肤圆点（深空 / 奶油 / 玻璃，选择记在 localStorage） |
 
@@ -170,6 +168,23 @@ DSH 窗口最顶部正中悬一枚小岛，收起时一行看完当前会话在�
   同一次状态变化只弹一次。动作成功或新通知到达时主动失效缓存。
 - 所有热路径改动都不影响接口形状，客户端无需配套升级。
 
+
+### 为什么删掉「待办」和「日程」
+
+两个区块长期空白，不是 bug 而是**语义不匹配**：
+
+- **待办**：`todos` 是 `dsh-tool-todo` 的会话投影，`apply` 规则是
+  `event.type === "todo/write" ? 事件内容 : event.type === "turn/start" ? null : 旧值` ——
+  **每轮开始就被清空**。它表达的是「agent 这一轮的小计划」，不是给人看的任务清单。
+- **日程**：`schedule.list({ sessionId })` 只返回**当前会话**的 active 提醒，
+  换会话 / 多会话时就全空；只有 `schedule.catalog()` 能列全部。
+
+与其摆两个永远空的框（看起来像半成品），不如让面板只留**真的有内容**的四块：
+最近状态 / 运行中 / 额度 / 快捷操作。
+
+底层能力没丢：快捷操作里的「⏱ 5 分钟 / 30 分钟提醒」和删除提醒的动作都还在
+（`schedule.create` / `schedule.delete`），只是不再常驻一个空列表。
+
 ## 获取
 
 ```bash
@@ -283,9 +298,9 @@ node test-actions.mjs   # 宿主动作单元测试（假 ctx，不碰真实 DSH�
 | 会话清单 / 在跑状态 | 活跃 `Session` + `ctx.get('agents').list()` 的 `status === 'running'` |
 | 标题 | 会话投影 `title`（`dsh-session-title` 的日志投影），缺失时退回首条 `user/message` |
 | 额度 | 投影 `contextPressure`：`projectedTokens / contextWindow` |
-| 待办 | 投影 `todos`（最后一次 `todo/write` 的整表） |
+| ~~待办~~ | 已移除：`todos` 投影每次 `turn/start` 就被清空，是 agent 单轮临时计划，长期看几乎永远空 |
 | 运行中的活 | `ctx.waterfall('workspace/session-activity')` → turn / job / subagent / schedule 四族 |
-| 日程 | `ctx.get('schedule').list({ sessionId })`，按时间升序取前 3 |
+| ~~日程~~ | 已移除展示：`list()` 只返回当前会话的 active 提醒，换会话就空。底层能力保留（快捷操作里的「⏱ 提醒」与删除提醒仍可用） |
 
 > 注：`ctx.get('sessionController').list()` 在桌面宿主里可能返回空（依赖 `sessionQuery` 的持久化索引），
 > 所以这里以活跃 Session 为主，`list()` 只作补充。
