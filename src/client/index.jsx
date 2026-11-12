@@ -39,6 +39,7 @@ const MOTION_DEFS = [
   { key: 'hover',  label: '悬停展开',     hint: '关闭后只能点击岛体展开',         default: true },
   { key: 'reduce', label: '跟随系统减少动效', hint: '系统开启「减少动态效果」时自动全关', default: true },
   { key: 'notify', label: '状态提示',     hint: '完成时与异常时弹出提示；关闭后只在面板里留记录', default: true },
+  { key: 'system', label: '本机状态',     hint: '显示 CPU/内存/GPU/磁盘与正在播放的音乐',   default: true },
 ];
 
 const MOTION_KEY = `${NS}.motion`;
@@ -135,12 +136,14 @@ function sameState(a, b) {
   if (!a || !b) return false;
   const keys = [
     'ok', 'sessions', 'runningCount', 'busy', 'session',
-    'usage', 'tokens', 'jobs', 'approvals',
+    'usage', 'tokens', 'jobs', 'approvals', 'systemAt',
     'notificationsSeq',
   ];
   for (const key of keys) {
-    const av = key === 'notificationsSeq' ? a.notifications?.seq : a[key];
-    const bv = key === 'notificationsSeq' ? b.notifications?.seq : b[key];
+    const av = key === 'notificationsSeq' ? a.notifications?.seq
+      : key === 'systemAt' ? a.system?.collectedAt : a[key];
+    const bv = key === 'notificationsSeq' ? b.notifications?.seq
+      : key === 'systemAt' ? b.system?.collectedAt : b[key];
     if (typeof av === 'object' || typeof bv === 'object') {
       if (JSON.stringify(av) !== JSON.stringify(bv)) return false;
     } else if (av !== bv) {
@@ -475,6 +478,92 @@ function Empty({ children }) {
 
 /* ── 岛主体 ───────────────────────────────────────── */
 
+function formatClock(seconds) {
+  const s = Math.max(0, Math.floor(Number(seconds) || 0));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
+
+function Metric({ label, value, pct, tone }) {
+  return (
+    <div className={`${CLS}-metric`}>
+      <div className={`${CLS}-metric-head`}>
+        <span>{label}</span>
+        <b>{value}</b>
+      </div>
+      {pct !== null && pct !== undefined ? (
+        <div className={`${CLS}-metric-bar`} data-tone={tone}>
+          <i style={{ width: `${Math.min(100, Math.max(0, pct))}%` }} />
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function SystemSection({ system, motion }) {
+  if (!system || system.enabled === false || motion?.system === false) return null;
+  const fast = system.fast;
+  const media = system.media;
+
+  const cpuPct = fast?.cpuLoad;
+  const memPct = fast?.memPct;
+  const gpuPct = system.gpuLoad;
+  const diskPct = Number.isFinite(system.diskFreeGB) && Number.isFinite(system.diskTotalGB) && system.diskTotalGB > 0
+    ? Math.round((1 - system.diskFreeGB / system.diskTotalGB) * 100)
+    : null;
+  const tone = (v) => (v >= 85 ? 'alert' : v >= 60 ? 'warn' : 'ok');
+
+  return (
+    <Section title="本机" extra={fast ? `${fast.cores} 核` : undefined}>
+      {media && media.playing && media.title ? (
+        <div className={`${CLS}-media`}>
+          <div className={`${CLS}-media-top`}>
+            <span className={`${CLS}-media-note`}>♪</span>
+            <span className={`${CLS}-row-text`}>
+              {media.title}{media.artist ? ` · ${media.artist}` : ''}
+            </span>
+            <span className={`${CLS}-row-sub`}>
+              {media.duration > 0
+                ? `${formatClock(media.position)}/${formatClock(media.duration)}`
+                : '播放中'}
+            </span>
+          </div>
+          {media.duration > 0 ? (
+            <div className={`${CLS}-media-bar`}>
+              <i style={{ width: `${Math.min(100, (media.position / media.duration) * 100)}%` }} />
+            </div>
+          ) : null}
+        </div>
+      ) : (
+        <div className={`${CLS}-media ${CLS}-media-idle`}>
+          <span className={`${CLS}-media-note`}>♪</span>
+          <span className={`${CLS}-row-text`}>未播放</span>
+          <span className={`${CLS}-row-sub`}>
+            {system.mediaSupported === false ? '音乐信息不可用' : '播放音乐后显示'}
+          </span>
+        </div>
+      )}
+
+      <div className={`${CLS}-metrics`}>
+        <Metric label="CPU" value={cpuPct === null || cpuPct === undefined ? '—' : `${cpuPct}%`} pct={cpuPct} tone={tone(cpuPct ?? 0)} />
+        <Metric label="内存" value={memPct === undefined ? '—' : `${memPct}%`} pct={memPct} tone={tone(memPct ?? 0)} />
+        {gpuPct !== null && gpuPct !== undefined ? (
+          <Metric label="GPU" value={`${gpuPct}%`} pct={gpuPct} tone={tone(gpuPct)} />
+        ) : null}
+        {diskPct !== null ? (
+          <Metric label="磁盘" value={`${system.diskFreeGB}G 可用`} pct={diskPct} tone={tone(diskPct)} />
+        ) : null}
+      </div>
+
+      {system.gpu ? (
+        <div className={`${CLS}-sys-foot`}>{system.gpu}</div>
+      ) : null}
+      {system.mediaSupported === false ? (
+        <div className={`${CLS}-sys-foot`}>音乐信息暂不可用</div>
+      ) : null}
+    </Section>
+  );
+}
+
 function formatAgo(at) {
   if (!Number.isFinite(at)) return '';
   const delta = Math.max(0, Math.round((Date.now() - at) / 1000));
@@ -508,6 +597,17 @@ function Island() {
   const position = usePosition();
   const { motion, update: updateMotion, reset: resetMotion } = useMotion();
   useNotifications(state, show, motion);
+  systemActionRunner = run;
+
+  /** 改动效开关；「本机状态」同时通知宿主停/启后台采集 */
+  const setMotionOption = (key, value) => {
+    updateMotion(key, value);
+    if (key === 'system') void run('toggleSystem', { enabled: value });
+  };
+  const resetMotionOptions = () => {
+    resetMotion();
+    void run('toggleSystem', { enabled: true });
+  };
   const [showMotion, setShowMotion] = useState(false);
   // 离线预览页 ?expand=1 强制展开；生产环境不带该参数
   const [pinned, setPinned] = useState(() => {
@@ -764,6 +864,8 @@ function Island() {
                 )}
               </Section>
 
+              <SystemSection system={state.system} motion={motion} />
+
             </div>
 
             <div className={`${CLS}-quick`} data-no-drag>
@@ -877,7 +979,7 @@ function Island() {
 
 /* ── 设置页：动效开关 ─────────────────────────────── */
 
-function IslandSettingsSection() {
+function IslandSettingsSection({ onOptionChange, onReset } = {}) {
   const { motion, update, reset } = useMotion();
   const [previewPulse, setPreviewPulse] = useState(0);
 
@@ -893,7 +995,7 @@ function IslandSettingsSection() {
             逐项开关，改动立即生效并保存到本机（localStorage）
           </div>
         </div>
-        <button type="button" className={`${CLS}-settings-reset`} onClick={reset}>
+        <button type="button" className={`${CLS}-settings-reset`} onClick={() => { reset(); onReset?.(); }}>
           恢复默认
         </button>
       </div>
@@ -943,6 +1045,8 @@ export const inject = ['slots'];
 
 /** 由 apply 注入，组件里用它做「切会话 / 新会话 / 停止」等客户端动作 */
 let clientCtx = null;
+/** 由 Island 注入，供设置页联动宿主动作（同一页面内） */
+let systemActionRunner = null;
 
 /** 安全取客户端服务：没有就返回 undefined，不影响岛体 */
 function clientService(key) {
@@ -987,7 +1091,15 @@ export function apply(ctx) {
           order: 61,
           label: 'XCool-DSH灵动岛',
         },
-        IslandSettingsSection,
+        (props) => (
+          <IslandSettingsSection
+            {...props}
+            onOptionChange={(key, value) => {
+              if (key === 'system') void systemActionRunner?.('toggleSystem', { enabled: value });
+            }}
+            onReset={() => void systemActionRunner?.('toggleSystem', { enabled: true })}
+          />
+        ),
       ),
     ),
   );
