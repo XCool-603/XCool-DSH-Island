@@ -107,6 +107,17 @@
     jobs: [{ id: 'turn', title: '正在处理', elapsed: '' }],
     schedule: [{ id: 's1', title: '每日回顾', when: '2 小时后' }],
     approvals: [],
+    // __ISLAND_SYSTEM_MOCK
+    system: {
+      enabled: true, ok: true, collectedAt: Date.now(),
+      fast: { cpuModel: '12th Gen Intel Core i5-12490F', cores: 12, cpuLoad: 23,
+              memTotalGB: 15.8, memFreeGB: 2.3, memPct: 85, uptimeHours: 46, platform: 'win32 x64' },
+      gpu: 'NVIDIA GeForce GT 710', gpuLoad: 34,
+      diskFreeGB: 2.8, diskTotalGB: 238.2, battery: null,
+      mediaSupported: true,
+      media: { playing: true, title: '起风了', artist: '买辣椒也用券', album: '',
+               app: 'cloudmusic', position: 98, duration: 325 },
+    },
     // __ISLAND_NOTICE_MOCK
     notifications: new URLSearchParams(location.search).get('notices') === '1' ? {
       seq: 3,
