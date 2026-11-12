@@ -483,9 +483,17 @@ function formatClock(seconds) {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
 
-function Metric({ label, value, pct, tone }) {
+function Metric({ label, value, pct, tone, onClick }) {
   return (
-    <div className={`${CLS}-metric`}>
+    <div
+      className={`${CLS}-metric`}
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      data-no-drag={onClick ? true : undefined}
+      title={onClick ? '查看详情' : undefined}
+      onClick={onClick}
+      onKeyDown={onClick ? (e) => { if (e.key === 'Enter') { e.preventDefault(); onClick(e); } } : undefined}
+    >
       <div className={`${CLS}-metric-head`}>
         <span>{label}</span>
         <b>{value}</b>
@@ -499,7 +507,7 @@ function Metric({ label, value, pct, tone }) {
   );
 }
 
-function SystemSection({ system, motion }) {
+function SystemSection({ system, motion, onAction, show }) {
   if (!system || system.enabled === false || motion?.system === false) return null;
   const fast = system.fast;
   const media = system.media;
@@ -539,6 +547,16 @@ function SystemSection({ system, motion }) {
                 : '播放中'}
             </span>
           </div>
+          {onAction ? (
+            <div className={`${CLS}-media-ctl`} data-no-drag>
+              <button type="button" title="上一首" onClick={(e) => { e.stopPropagation(); void onAction('mediaControl', { control: 'prev' }); }}>⏮</button>
+              <button type="button" title={media.playing ? '暂停' : '播放'}
+                onClick={(e) => { e.stopPropagation(); void onAction('mediaControl', { control: media.playing ? 'pause' : 'play' }); }}>
+                {media.playing ? '⏸' : '▶'}
+              </button>
+              <button type="button" title="下一首" onClick={(e) => { e.stopPropagation(); void onAction('mediaControl', { control: 'next' }); }}>⏭</button>
+            </div>
+          ) : null}
           {media.duration > 0 ? (
             <div className={`${CLS}-media-bar`}>
               <i style={{ width: `${Math.min(100, (media.position / media.duration) * 100)}%` }} />
@@ -556,13 +574,17 @@ function SystemSection({ system, motion }) {
       )}
 
       <div className={`${CLS}-metrics`}>
-        <Metric label="CPU" value={cpuPct === null || cpuPct === undefined ? '—' : `${cpuPct}%`} pct={cpuPct} tone={tone(cpuPct ?? 0)} />
-        <Metric label="内存" value={memPct === undefined ? '—' : `${memPct}%`} pct={memPct} tone={tone(memPct ?? 0)} />
+        <Metric label="CPU" value={cpuPct === null || cpuPct === undefined ? '—' : `${cpuPct}%`} pct={cpuPct} tone={tone(cpuPct ?? 0)}
+          onClick={(e) => { e.stopPropagation(); show?.('CPU', 'success', `${fast?.cpuModel || '未知'} · ${fast?.cores ?? '—'} 核 · 负载 ${cpuPct ?? '—'}%`); }} />
+        <Metric label="内存" value={memPct === undefined ? '—' : `${memPct}%`} pct={memPct} tone={tone(memPct ?? 0)}
+          onClick={(e) => { e.stopPropagation(); show?.('内存', 'success', `${fast?.memFreeGB ?? '—'} GB 可用 / ${fast?.memTotalGB ?? '—'} GB`); }} />
         {gpuPct !== null && gpuPct !== undefined ? (
-          <Metric label="GPU" value={`${gpuPct}%`} pct={gpuPct} tone={tone(gpuPct)} />
+          <Metric label="GPU" value={`${gpuPct}%`} pct={gpuPct} tone={tone(gpuPct)}
+          onClick={(e) => { e.stopPropagation(); show?.('显卡', 'success', system.gpu || '未知'); }} />
         ) : null}
         {diskPct !== null ? (
-          <Metric label={diskName} value={diskLabel} pct={diskPct} tone={tone(diskPct)} />
+          <Metric label={diskName} value={diskLabel} pct={diskPct} tone={tone(diskPct)}
+          onClick={(e) => { e.stopPropagation(); show?.('磁盘', diskPct >= 85 ? 'error' : 'success', `${diskLabel} / 共 ${system.diskTotalGB ?? '—'} GB`); }} />
         ) : null}
       </div>
 
@@ -624,6 +646,12 @@ function Island() {
     void run('toggleSystem', { enabled: true });
   };
   const [showMotion, setShowMotion] = useState(false);
+  // __V2_TAB_PARAM __ISLAND_V2__ 两个页签，默认「概览」一屏放得下；「本机」按需切换
+  const [tab, setTab] = useState(() => {
+    try {
+      return new URLSearchParams(window.location.search).get('tab') === 'system' ? 'system' : 'overview';
+    } catch { return 'overview'; }
+  });
   // 离线预览页 ?expand=1 强制展开；生产环境不带该参数
   const [pinned, setPinned] = useState(() => {
     try {
@@ -687,7 +715,10 @@ function Island() {
   const usagePercent = state.usage?.percent ?? null;
   const approvals = state.approvals ?? [];
   const jobs = state.jobs ?? [];
-  const notices = (state.notifications?.items ?? []).slice(-3).reverse();
+  // 列表只留「完成 / 异常」；「开始运行」由岛体状态点表达
+  const notices = (state.notifications?.items ?? [])
+    .filter((item) => item.kind === 'success' || item.kind === 'error')
+    .slice(-3).reverse();
   const runningCount = state.runningCount ?? (state.busy ? 1 : 0);
 
   // ── 客户端动作（不写会话日志，优先走 DSH 自己的正规路径） ──
@@ -822,10 +853,26 @@ function Island() {
         <div className={`${CLS}-panel`}>
           <div className={`${CLS}-panel-inner`}>
             <div className={`${CLS}-body`}>
+              <div className={`${CLS}-tabs`} data-no-drag>
+                <button type="button" className={`${CLS}-tab`}
+                  data-active={tab === 'overview' ? 'true' : 'false'}
+                  onClick={(e) => { e.stopPropagation(); setTab('overview'); }}>概览</button>
+                <button type="button" className={`${CLS}-tab`}
+                  data-active={tab === 'system' ? 'true' : 'false'}
+                  onClick={(e) => { e.stopPropagation(); setTab('system'); }}>本机</button>
+              </div>
+
+              {tab === 'overview' ? (<>
               {notices.length > 0 ? (
                 <Section title="最近状态" extra={`${notices.length} 条`}>
                   {notices.map((item) => (
-                    <div className={`${CLS}-row`} key={item.id ?? item.seq}>
+                    <div
+                      className={`${CLS}-row`}
+                      key={item.id ?? item.seq}
+                      role="button" tabIndex={0} title="查看完整信息" data-no-drag
+                      onClick={(e) => { e.stopPropagation(); show(item.title, item.kind === 'error' ? 'error' : 'success', item.detail || formatAgo(item.at)); }}
+                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); show(item.title, item.kind === 'error' ? 'error' : 'success', item.detail || formatAgo(item.at)); } }}
+                    >
                       <span className={`${CLS}-notice-dot`} data-kind={item.kind} />
                       <span className={`${CLS}-row-text`}>{item.title}</span>
                       <span className={`${CLS}-row-sub`}>{item.detail || formatAgo(item.at)}</span>
@@ -858,12 +905,19 @@ function Island() {
 
 
 
+              </>) : null}
+
+              {tab === 'system' ? (<>
               <Section title="额度">
                 {usagePercent === null ? (
                   <Empty>暂无用量信息</Empty>
                 ) : (
                   <>
-                    <div className={`${CLS}-row`}>
+                    <div
+                      className={`${CLS}-row`} role="button" tabIndex={0} data-no-drag
+                      title="查看用量详情"
+                      onClick={(e) => { e.stopPropagation(); show('上下文用量', 'success', `${state.usage?.label || usagePercent + '%'} · 模型 ${state.session?.model || '未知'}`); }}
+                    >
                       <span className={`${CLS}-row-text`}>上下文占用</span>
                       <span className={`${CLS}-row-sub`}>
                         {state.usage?.label || `${usagePercent}%`}
@@ -879,7 +933,8 @@ function Island() {
                 )}
               </Section>
 
-              <SystemSection system={state.system} motion={motion} />
+              <SystemSection system={state.system} motion={motion} onAction={run} show={show} />
+              </>) : null}
 
             </div>
 
