@@ -185,6 +185,33 @@ DSH 窗口最顶部正中悬一枚小岛，收起时一行看完当前会话在�
 底层能力没丢：快捷操作里的「⏱ 5 分钟 / 30 分钟提醒」和删除提醒的动作都还在
 （`schedule.create` / `schedule.delete`），只是不再常驻一个空列表。
 
+
+## 本机状态（CPU / 内存 / 显卡 / 磁盘 / 音乐）
+
+展开面板里的「本机」区块，把电脑的实时状态收进岛里：
+
+| 指标 | 来源 | 说明 |
+|---|---|---|
+| CPU 型号 / 核心数 / 负载 | Node `os.cpus()` 两次采样差值 | 零子进程，实时 |
+| 内存占用 / 总量 / 可用 | Node `os.totalmem()/freemem()` | 实时 |
+| 显卡型号 / GPU 利用率 | `Win32_VideoController` + `\GPU Engine(*)\Utilization Percentage` | 慢层，12s 刷新 |
+| 磁盘剩余 / 总量 | `Win32_LogicalDisk` | 慢层 |
+| 电池电量 | `Win32_Battery`（有电池才有） | 慢层 |
+| 正在播放的音乐 | Windows SMTC（`GlobalSystemMediaTransportControlsSessionManager`，WinRT via PowerShell `AsTask().Wait()`） | 歌名 / 艺术家 / 专辑 / 播放进度 / 来源应用 |
+
+**关键设计：两层采集，不拖慢轮询**
+
+- 快层用 Node 原生 `os`（零成本）；慢层 PowerShell（GPU 计数器约 0.3–3s）在**后台 12 秒**独立刷新，结果缓存。
+- `/island/state` 只读缓存，实测延迟 ~85ms，与没加系统信息时一样。
+- 两个 PowerShell 并行跑、各带超时，`timer.unref()`，插件卸载时 `system.stop()` 清理；任何一项失败自动降级，不影响岛体。
+- `refresh()` 复用同一个 in-flight promise，并发调用不会拿到半成品缓存。
+
+**音乐**：走 Windows 系统媒体传输控制，能覆盖网易云 / QQ 音乐 / Spotify / 浏览器视频等提供 SMTC 会话的播放器。
+没播放时显示「♪ 未播放 · 播放音乐后显示」，不会整块消失。若系统不支持会标「音乐信息不可用」。
+
+**开关**：第 10 个动效/功能开关「本机状态」，关掉时不仅隐藏 UI，还会通过 `toggleSystem` 动作让宿主**停掉后台采集**（不再起 PowerShell 子进程）；重新打开后下一轮恢复。
+`test-system.mjs` 覆盖真实采集与开关。
+
 ## 获取
 
 ```bash
