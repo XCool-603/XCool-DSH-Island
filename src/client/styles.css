@@ -772,6 +772,52 @@
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
+
+
+.dz-metric[role='button'] { cursor: pointer; border-radius: 8px; padding: 2px 4px; margin: -2px -4px; }
+.dz-metric[role='button']:hover { background: var(--dz-fill-2); }
+.dz-media-ctl {
+  display: flex; gap: 6px; justify-content: flex-end;
+  margin-top: 4px;
+  -webkit-app-region: no-drag;
+}
+.dz-media-ctl button {
+  appearance: none; border: .5px solid var(--dz-sep);
+  width: 26px; height: 22px;
+  border-radius: 7px;
+  background: var(--dz-fill-2);
+  color: var(--dz-label);
+  font: inherit; font-size: 11px;
+  cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.dz-media-ctl button:hover { background: var(--dz-fill); border-color: var(--dz-accent); }
+
+/* ── 页签 ─────────────────────────────────────────── */
+.dz-tabs {
+  display: flex; gap: 4px;
+  padding: 4px; margin: 2px 0 8px;
+  border-radius: 10px;
+  background: var(--dz-fill);
+  -webkit-app-region: no-drag;
+}
+.dz-tab {
+  flex: 1 1 0;
+  appearance: none; border: 0;
+  padding: 5px 8px;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--dz-2);
+  font: inherit; font-size: 11.5px; font-weight: 550;
+  cursor: pointer;
+  transition: background-color .18s ease, color .18s ease;
+}
+.dz-tab[data-active='true'] {
+  background: var(--dz-fill-2);
+  color: var(--dz-label);
+}
+.dz-tab:hover:not([data-active='true']) { color: var(--dz-label); }
+
 /* ── 岛内动效快捷面板 ────────────────────────────── */
 .dz-action[data-active='true'] {
   background: var(--dz-blue);
