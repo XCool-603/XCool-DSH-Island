@@ -708,6 +708,61 @@
 .dz-notice-dot[data-kind='running'] { background: #0a84ff; box-shadow: 0 0 6px rgba(10,132,255,.6); }
 .dz-notice-dot[data-kind='error']   { background: var(--dz-red); box-shadow: 0 0 6px rgba(255,69,58,.6); }
 
+
+/* ── 本机状态 ─────────────────────────────────────── */
+.dz-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px 12px;
+  padding: 2px 0;
+}
+.dz-metric-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--dz-2);
+  margin-bottom: 3px;
+}
+.dz-metric-head b { font-size: 12px; font-weight: 600; color: var(--dz-label); font-variant-numeric: tabular-nums; }
+.dz-metric-bar {
+  height: 3px;
+  border-radius: 999px;
+  background: var(--dz-fill-2);
+  overflow: hidden;
+}
+.dz-metric-bar > i {
+  display: block; height: 100%; border-radius: 999px;
+  background: linear-gradient(90deg, var(--dz-blue), #5ac8fa);
+  transition: width .6s ease;
+}
+.dz-metric-bar[data-tone='warn'] > i { background: linear-gradient(90deg, var(--dz-orange), #ffd60a); }
+.dz-metric-bar[data-tone='alert'] > i { background: linear-gradient(90deg, var(--dz-red), #ff6961); }
+
+.dz-media { margin-bottom: 8px; }
+.dz-media-top { display: flex; align-items: center; gap: 7px; min-height: 20px; }
+.dz-media-note {
+  flex: 0 0 auto;
+  width: 16px; height: 16px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--dz-blue) 22%, transparent);
+  color: #5ac8fa; font-size: 10px;
+}
+.dz-media-bar {
+  height: 2px; margin-top: 5px; border-radius: 999px;
+  background: var(--dz-fill-2); overflow: hidden;
+}
+.dz-media-bar > i { display: block; height: 100%; background: #5ac8fa; border-radius: 999px; }
+.dz-media-idle { opacity: .55; }
+.dz-media-idle .dz-media-note { background: var(--dz-fill-2); color: var(--dz-3); }
+.dz-sys-foot {
+  margin-top: 6px;
+  font-size: 10px;
+  color: var(--dz-3);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
 /* ── 岛内动效快捷面板 ────────────────────────────── */
 .dz-action[data-active='true'] {
   background: var(--dz-blue);
