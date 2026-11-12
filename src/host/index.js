@@ -294,6 +294,143 @@ function formatTokens(n) {
   return String(Math.round(n));
 }
 
+
+/* ── 主 / 子代理关系 ───────────────────────────────── */
+
+/**
+ * 从会话投影组装「主 → 子」树。
+ * 实测字段（0.2.1-rc.5）：
+ *   subagentCatalog.head.values[] = { childId, label, mode, childCreatedAt }
+ *   agentTeam.members[]           = { id(=childId), name, description, phase }
+ *   agent.status                 = running | idle
+ */
+async function readAgentTree(ctx) {
+  const sessions = service(ctx, 'sessions');
+  const agents = service(ctx, 'agents');
+  const projections = service(ctx, 'sessionProjections');
+  if (!sessions || !isFn(sessions.list)) return { parents: [], totalChildren: 0 };
+
+  const live = safeArray(() => sessions.list());
+  const agentList = safeArray(() => agents?.list?.());
+  const bySession = new Map();
+  for (const agent of agentList) {
+    const id = safe(() => agent?.session?.id ?? agent?.id, null);
+    if (id) bySession.set(String(id), agent);
+  }
+  const stateOf = (session, key) =>
+    safe(() => projections?.stateOf?.(session, key), undefined);
+
+  // sessionController.list() 的行带 parentSessionId / origin（fork 出的子会话会写在这里）。
+  // 用它补上「父有记录但 subagentCatalog 没登记」的血缘。
+  const listedByParent = new Map();
+  const controller = service(ctx, 'sessionController');
+  if (isFn(controller?.list)) {
+    const rows = await safeAsync(() => controller.list(), null);
+    if (Array.isArray(rows)) {
+      for (const row of rows) {
+        const pid = String(row?.parentSessionId ?? row?.raw?.parentSessionId ?? '');
+        const cid = String(row?.sessionId ?? row?.id ?? '');
+        if (!pid || !cid) continue;
+        if (!listedByParent.has(pid)) listedByParent.set(pid, []);
+        listedByParent.get(pid).push({
+          id: cid,
+          title: String(row?.title ?? row?.raw?.title ?? '').trim() || cid.slice(0, 12),
+          running: row?.running === true,
+        });
+      }
+    }
+  }
+
+  const parents = [];
+  let totalChildren = 0;
+
+  for (const session of live) {
+    const id = String(safe(() => session.id, ''));
+    if (!id) continue;
+    const title = stateOf(session, 'title') || safe(() => session.header?.title, '') || '';
+    const catalog = stateOf(session, 'subagentCatalog');
+    const values = catalog?.head?.values;
+    const team = stateOf(session, 'agentTeam');
+    const members = Array.isArray(team?.members) ? team.members : [];
+
+    // 子代理目录（权威）与 Team roster（补充名字/状态）按 childId 合并
+    const children = new Map();
+    if (Array.isArray(values)) {
+      for (const v of values) {
+        const cid = String(v?.childId ?? v?.sessionId ?? '');
+        if (!cid) continue;
+        children.set(cid, {
+          id: cid,
+          title: String(v?.label ?? '').trim() || cid.slice(0, 12),
+          mode: String(v?.mode ?? ''),
+          name: null,
+          phase: null,
+          status: 'idle',
+          running: false,
+          createdAt: Number(v?.childCreatedAt) || 0,
+        });
+      }
+    }
+    for (const m of members) {
+      const cid = String(m?.id ?? '');
+      if (!cid) continue;
+      const row = children.get(cid) ?? {
+        id: cid, title: String(m?.description ?? m?.name ?? cid.slice(0, 12)),
+        mode: '', name: null, phase: null, status: 'idle', running: false, createdAt: 0,
+      };
+      row.name = String(m?.name ?? '') || null;
+      row.phase = String(m?.phase ?? '') || null;
+      if (m?.description) row.title = String(m.description).trim() || row.title;
+      children.set(cid, row);
+    }
+
+    // 补上 catalog 未登记、但 sessionController 明确标了 parentSessionId 的子会话（fork 等）
+    for (const extra of listedByParent.get(id) ?? []) {
+      if (children.has(extra.id)) continue;
+      children.set(extra.id, {
+        id: extra.id,
+        title: extra.title,
+        mode: '', name: null, phase: null,
+        status: extra.running ? 'running' : 'idle',
+        running: extra.running,
+        createdAt: 0,
+      });
+    }
+
+    // 子会话可能也是活跃 agent，用它的 status 覆盖
+    for (const [cid, row] of children) {
+      const agent = bySession.get(cid);
+      if (agent) {
+        const status = safe(() => agent.status, 'idle');
+        row.status = status === 'running' ? 'running' : 'idle';
+        row.running = status === 'running';
+      } else if (row.phase === 'active') {
+        row.status = 'running';
+        row.running = true;
+      }
+    }
+
+    const childRows = [...children.values()]
+      .sort((a, b) => (b.running ? 1 : 0) - (a.running ? 1 : 0) || b.createdAt - a.createdAt);
+    if (childRows.length === 0) continue;
+
+    totalChildren += childRows.length;
+    const self = bySession.get(id);
+    parents.push({
+      id,
+      title: String(title || '主会话').slice(0, 60),
+      status: safe(() => self?.status, 'idle') === 'running' ? 'running' : 'idle',
+      running: safe(() => self?.status, 'idle') === 'running',
+      childCount: childRows.length,
+      runningChildren: childRows.filter((c) => c.running).length,
+      children: childRows.slice(0, 12),
+    });
+  }
+
+  parents.sort((a, b) => b.runningChildren - a.runningChildren || b.childCount - a.childCount);
+  return { parents: parents.slice(0, 4), totalChildren };
+}
+
 /* ── 快照 ─────────────────────────────────────────── */
 
 /** 最近一次组装用到的会话行，供自检复用（list() 不一定能在同一 tick 内重复调用） */
@@ -335,6 +472,10 @@ async function buildState(ctx) {
   }));
 
   const currentTitle = titleOf(current);
+  const agentTree = await safeAsync(
+    () => readAgentTree(ctx),
+    { parents: [], totalChildren: 0 },
+  );
 
   return {
     ok: true,
@@ -354,6 +495,7 @@ async function buildState(ctx) {
     tokens: current?.usage?.used ?? null,
     jobs,
     approvals: [],
+    agentTree,
     notifications: notifier.snapshot(),
     system: system.snapshot(),
   };
@@ -506,8 +648,53 @@ async function diagnose(ctx, { includeState = true } = {}) {
         }
       : null,
     projectionPreview: rows[0] ? projectionPreview(rows[0].raw) : null,
+    agentGraph: probeAgentGraph(ctx),
     state: includeState ? await safeAsync(() => buildState(ctx), null) : null,
   };
+}
+
+/** 临时诊断：dump 每个 agent 上所有可能表达父子关系的字段 */
+function probeAgentGraph(ctx) {
+  const agents = service(ctx, 'agents');
+  if (!agents || !isFn(agents.list)) return { error: 'agents 不可用' };
+  try {
+    const list = agents.list();
+    const roots = isFn(agents.roots) ? safe(() => agents.roots(), null) : null;
+    return {
+      count: list.length,
+      rootIds: Array.isArray(roots) ? roots.map((a) => safe(() => a?.id, null)) : null,
+      entries: list.slice(0, 12).map((agent) => {
+        const session = safe(() => agent?.session, null);
+        const header = safe(() => session?.header, null);
+        const keys = agent ? Object.keys(agent) : [];
+        return {
+          id: safe(() => agent?.id, null),
+          status: safe(() => agent?.status, null),
+          keys,
+          owner: safe(() => agent?.owner, null),
+          parentSessionId: safe(() => agent?.parentSessionId, null),
+          headerParentSession: safe(() => header?.parentSession, null),
+          headerOrigin: safe(() => header?.origin, null),
+          sessionId: safe(() => session?.id, null),
+          title: safe(() => header?.title, null),
+          projections: (() => {
+            const proj = service(ctx, 'sessionProjections');
+            if (!proj || !isFn(proj.stateOf)) return null;
+            const out = {};
+            for (const key of ['subagentCatalog', 'agentTeam', 'subagent', 'title']) {
+              const value = safe(() => proj.stateOf(session, key), undefined);
+              if (value !== undefined && value !== null) {
+                out[key] = safe(() => JSON.parse(JSON.stringify(value)), '[unserializable]');
+              }
+            }
+            return out;
+          })(),
+        };
+      }),
+    };
+  } catch (error) {
+    return { error: String(error) };
+  }
 }
 
 /* ── 落盘自检 ─────────────────────────────────────── */
