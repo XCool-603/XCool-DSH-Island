@@ -512,6 +512,18 @@ function SystemSection({ system, motion }) {
     : null;
   const tone = (v) => (v >= 85 ? 'alert' : v >= 60 ? 'warn' : 'ok');
 
+  // 小于 1GB 时改用 MB，避免 0.04G 被写成 "0G"
+  const diskLabel = (() => {
+    const bytes = Number(system.diskFreeBytes);
+    if (Number.isFinite(bytes) && bytes < 1024 ** 3) {
+      return `${Math.round(bytes / 1024 ** 2)} MB 可用`;
+    }
+    const gb = Number(system.diskFreeGB);
+    if (Number.isFinite(gb)) return `${gb}G 可用`;
+    return '—';
+  })();
+  const diskName = system.diskDrive ? `磁盘 ${system.diskDrive}` : '磁盘';
+
   return (
     <Section title="本机" extra={fast ? `${fast.cores} 核` : undefined}>
       {media && media.playing && media.title ? (
@@ -550,7 +562,7 @@ function SystemSection({ system, motion }) {
           <Metric label="GPU" value={`${gpuPct}%`} pct={gpuPct} tone={tone(gpuPct)} />
         ) : null}
         {diskPct !== null ? (
-          <Metric label="磁盘" value={`${system.diskFreeGB}G 可用`} pct={diskPct} tone={tone(diskPct)} />
+          <Metric label={diskName} value={diskLabel} pct={diskPct} tone={tone(diskPct)} />
         ) : null}
       </div>
 
@@ -559,6 +571,9 @@ function SystemSection({ system, motion }) {
       ) : null}
       {system.mediaSupported === false ? (
         <div className={`${CLS}-sys-foot`}>音乐信息暂不可用</div>
+      ) : null}
+      {Number.isFinite(Number(system.diskFreeBytes)) && Number(system.diskFreeBytes) < 1024 ** 3 ? (
+        <div className={`${CLS}-sys-warn`}>⚠ 系统盘空间严重不足，建议尽快清理</div>
       ) : null}
     </Section>
   );
