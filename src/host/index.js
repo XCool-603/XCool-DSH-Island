@@ -21,6 +21,7 @@
 import { writeFileSync } from 'node:fs';
 import { runAction, ACTION_NAMES } from './actions.js';
 import { createNotifier, collectJobs, diffJobs, EVENT_DEFINITIONS } from './notifications.js';
+import { createSystemMonitor } from './system.js';
 
 export const name = 'island';
 
@@ -51,6 +52,9 @@ const notifier = createNotifier(() => {
 });
 const jobStatuses = new Map();
 let jobSampling = true;
+
+/** 本机状态采集器：后台慢速刷新，状态接口只读缓存 */
+const system = createSystemMonitor({ intervalMs: 12_000, enabled: true });
 
 /** 取快照：TTL 内复用；并发请求合并成同一个 Promise */
 async function currentSnapshot(ctx) {
@@ -351,6 +355,7 @@ async function buildState(ctx) {
     jobs,
     approvals: [],
     notifications: notifier.snapshot(),
+    system: system.snapshot(),
   };
 }
 
@@ -572,7 +577,7 @@ export function apply(ctx) {
           }
           const rejection = validateAction(ctx, payload);
           if (rejection) return sendJson(res, 422, { ok: false, message: rejection });
-          const result = await runAction(ctx, payload);
+          const result = await runAction(ctx, payload, { system });
           // 成功的写动作会让旧快照过期，下一次轮询立刻看到新状态
           if (result?.ok) {
             cachedSnapshot = null;
@@ -607,5 +612,7 @@ export function apply(ctx) {
 
   ctx.effect?.(() => () => {
     for (const dispose of disposers.reverse()) safe(() => dispose?.());
+    // 停掉后台采集定时器，避免 HMR 重载后留下孤儿进程
+    system.stop();
   }, 'island.routes');
 }
