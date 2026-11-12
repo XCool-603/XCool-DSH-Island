@@ -136,14 +136,16 @@ function sameState(a, b) {
   if (!a || !b) return false;
   const keys = [
     'ok', 'sessions', 'runningCount', 'busy', 'session',
-    'usage', 'tokens', 'jobs', 'approvals', 'systemAt',
+    'usage', 'tokens', 'jobs', 'approvals', 'systemAt', 'agentTreeAt',
     'notificationsSeq',
   ];
   for (const key of keys) {
     const av = key === 'notificationsSeq' ? a.notifications?.seq
-      : key === 'systemAt' ? a.system?.collectedAt : a[key];
+      : key === 'systemAt' ? a.system?.collectedAt
+      : key === 'agentTreeAt' ? JSON.stringify(a.agentTree?.parents?.map((p) => [p.id, p.runningChildren, p.children?.map((c) => c.running)])) : a[key];
     const bv = key === 'notificationsSeq' ? b.notifications?.seq
-      : key === 'systemAt' ? b.system?.collectedAt : b[key];
+      : key === 'systemAt' ? b.system?.collectedAt
+      : key === 'agentTreeAt' ? JSON.stringify(b.agentTree?.parents?.map((p) => [p.id, p.runningChildren, p.children?.map((c) => c.running)])) : b[key];
     if (typeof av === 'object' || typeof bv === 'object') {
       if (JSON.stringify(av) !== JSON.stringify(bv)) return false;
     } else if (av !== bv) {
@@ -504,6 +506,62 @@ function Metric({ label, value, pct, tone, onClick }) {
         </div>
       ) : null}
     </div>
+  );
+}
+
+function TeamSection({ tree, show, onOpen }) {
+  const [expandedId, setExpandedId] = useState(null);
+  const parents = Array.isArray(tree?.parents) ? tree.parents : [];
+  if (parents.length === 0) return null;
+
+  return (
+    <Section title="协作" extra={`${parents.length} 主 · ${tree.totalChildren ?? 0} 子`}>
+      {parents.map((parent) => {
+        const isOpen = expandedId === parent.id || (expandedId === null && parent.runningChildren > 0);
+        return (
+          <div className={`${CLS}-team-parent`} key={parent.id}>
+            <div
+              className={`${CLS}-row`}
+              role="button" tabIndex={0} data-no-drag
+              title="展开/收起子代理"
+              onClick={(e) => { e.stopPropagation(); setExpandedId(isOpen ? '__none__' : parent.id); }}
+            >
+              <span className={`${CLS}-team-caret`} data-open={isOpen ? 'true' : 'false'}>▸</span>
+              <span className={`${CLS}-dot`} data-tone={parent.running ? 'live' : 'idle'} data-live={parent.running ? 'true' : 'false'} />
+              <span className={`${CLS}-row-text`}>{parent.title}</span>
+              <span className={`${CLS}-row-sub`}>
+                {parent.childCount} 子{parent.runningChildren > 0 ? ` · ${parent.runningChildren} 跑` : ''}
+              </span>
+            </div>
+            {isOpen ? (
+              <div className={`${CLS}-team-children`}>
+                {parent.children.slice(0, 8).map((child) => (
+                  <div
+                    className={`${CLS}-row ${CLS}-team-child`}
+                    key={child.id}
+                    role="button" tabIndex={0} data-no-drag
+                    title="查看子代理详情"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      show?.(child.title, child.running ? 'running' : 'success',
+                        `${child.name ? child.name + ' · ' : ''}${child.mode || '子代理'}${child.running ? ' · 运行中' : ' · 空闲'}`);
+                    }}
+                  >
+                    <span className={`${CLS}-team-branch`} aria-hidden="true">└</span>
+                    <span className={`${CLS}-dot`} data-tone={child.running ? 'live' : 'idle'} data-live={child.running ? 'true' : 'false'} />
+                    <span className={`${CLS}-row-text`}>{child.title}</span>
+                    {child.name ? <span className={`${CLS}-row-sub`}>{child.name}</span> : null}
+                  </div>
+                ))}
+                {parent.children.length > 8 ? (
+                  <div className={`${CLS}-team-more`}>还有 {parent.children.length - 8} 个…</div>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+        );
+      })}
+    </Section>
   );
 }
 
@@ -904,6 +962,8 @@ function Island() {
               ) : null}
 
 
+
+              <TeamSection tree={state.agentTree} show={show} />
 
               </>) : null}
 
