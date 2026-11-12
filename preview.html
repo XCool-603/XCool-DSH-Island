@@ -107,6 +107,23 @@
     jobs: [{ id: 'turn', title: '正在处理', elapsed: '' }],
     schedule: [{ id: 's1', title: '每日回顾', when: '2 小时后' }],
     approvals: [],
+    // __ISLAND_TREE_MOCK
+    agentTree: {
+      parents: [
+        { id: 'p1', title: '将 xiaotang-daozai UI 做成 DSH 插件', status: 'running', running: true,
+          childCount: 3, runningChildren: 1, children: [
+            { id: 'c1', title: 'Research agent hierarchy API', name: null, mode: 'continuable', phase: null, status: 'running', running: true, createdAt: 1 },
+            { id: 'c2', title: 'Research DSH status events', name: null, mode: 'continuable', phase: null, status: 'idle', running: false, createdAt: 2 },
+            { id: 'c3', title: 'Client plugin contract research', name: null, mode: 'continuable', phase: null, status: 'idle', running: false, createdAt: 3 },
+          ] },
+        { id: 'p2', title: 'Winform AntdUI 通用后台管理系统', status: 'running', running: true,
+          childCount: 2, runningChildren: 2, children: [
+            { id: 'c4', title: 'SQLite 持久化数据层', name: 'sqlite-dev', mode: 'continuable', phase: 'active', status: 'running', running: true, createdAt: 1 },
+            { id: 'c5', title: '部门管理模块界面层', name: 'dept-dev', mode: 'continuable', phase: 'active', status: 'running', running: true, createdAt: 2 },
+          ] },
+      ],
+      totalChildren: 5,
+    },
     // __ISLAND_SYSTEM_MOCK
     system: {
       enabled: true, ok: true, collectedAt: Date.now(),
