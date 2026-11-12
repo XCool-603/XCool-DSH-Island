@@ -258,6 +258,32 @@ DSH 窗口最顶部正中悬一枚小岛，收起时一行看完当前会话在�
 
 `test-system.mjs` / `test-perf.mjs` 覆盖合并采集、CPU 兜底、多盘与耗时。
 
+
+## 主 / 子代理协作树
+
+概览页的「协作」区块把 agent 之间的父子关系画成树：
+
+- **主代理**一行：标题 + 状态点 + `N 子 · M 跑`，可折叠
+- **子代理**缩进列出（带树线 `└`）：label / Team 成员名（如 `sqlite-dev`）、运行状态点
+- 默认展开**有子代理在跑**的主代理；点行可展开/收起，点子代理显示详情
+
+### 数据来源（实测 0.2.1-rc.5）
+
+| 数据 | 来源 | 字段 |
+|---|---|---|
+| 子代理目录 | `sessionProjections.stateOf(session, 'subagentCatalog')` | `head.values[] = { childId, label, mode, childCreatedAt }` |
+| Team 成员 | `stateOf(session, 'agentTeam')` | `members[] = { id, name, description, phase }`，补名字/角色 |
+| fork 子会话 | `sessionController.list()` | 行上的 `parentSessionId` / `origin`，补 catalog 未登记的血缘 |
+| 运行状态 | `ctx.agents.list()` | `agent.status`（running/idle），按会话 id 映射；Team `phase=active` 兜底 |
+| 主/子标题 | `stateOf(session, 'title')` | 会话标题投影 |
+
+全部调用包 try/catch，服务缺失或字段变化只会让区块消失，不影响岛体。
+最多显示 4 个主代理、每个 12 个子代理，按「在跑的子代理数」排序。
+
+**注意**：`ctx.agents` 的 Agent 对象上**没有** `owner`/`parentSessionId` 字段
+（实测 Object.keys 只有 loop 内部字段）；血缘在会话 header / 投影 / sessionController 行里，
+不要去读 agent 的私有 store。`subagents.listChildren()` 也可用，但字段是 `id` 而不是 `childId`。
+
 ## 获取
 
 ```bash
