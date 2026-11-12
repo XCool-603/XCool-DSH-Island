@@ -50,7 +50,8 @@ function copyHost() {
   copyFileSync(new URL('./src/host/index.js', import.meta.url), new URL('./lib/index.js', import.meta.url));
   copyFileSync(new URL('./src/host/actions.js', import.meta.url), new URL('./lib/actions.js', import.meta.url));
   copyFileSync(new URL('./src/host/notifications.js', import.meta.url), new URL('./lib/notifications.js', import.meta.url));
-  console.log('[island] copied lib/index.js + lib/actions.js + lib/notifications.js');
+  copyFileSync(new URL('./src/host/system.js', import.meta.url), new URL('./lib/system.js', import.meta.url));
+  console.log('[island] copied lib/index.js + lib/actions.js + lib/notifications.js + lib/system.js');
 }
 
 if (process.argv.includes('--watch')) {
