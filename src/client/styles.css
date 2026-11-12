@@ -756,6 +756,15 @@
 .dz-media-bar > i { display: block; height: 100%; background: #5ac8fa; border-radius: 999px; }
 .dz-media-idle { opacity: .55; }
 .dz-media-idle .dz-media-note { background: var(--dz-fill-2); color: var(--dz-3); }
+.dz-sys-warn {
+  margin-top: 6px;
+  padding: 5px 8px;
+  border-radius: 8px;
+  font-size: 10.5px;
+  color: #ff9f9a;
+  background: color-mix(in srgb, var(--dz-red) 14%, transparent);
+  border: .5px solid color-mix(in srgb, var(--dz-red) 35%, transparent);
+}
 .dz-sys-foot {
   margin-top: 6px;
   font-size: 10px;
