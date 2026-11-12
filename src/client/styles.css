@@ -793,6 +793,28 @@
 }
 .dz-media-ctl button:hover { background: var(--dz-fill); border-color: var(--dz-accent); }
 
+
+/* ── 主/子代理树 ──────────────────────────────────── */
+.dz-team-parent { margin-bottom: 2px; }
+.dz-team-caret {
+  flex: 0 0 auto; width: 10px;
+  display: inline-flex; justify-content: center;
+  font-size: 9px; color: var(--dz-3);
+  transition: transform .18s ease;
+}
+.dz-team-caret[data-open='true'] { transform: rotate(90deg); }
+.dz-team-children {
+  margin: 1px 0 4px 10px;
+  padding-left: 9px;
+  border-left: 1px solid var(--dz-sep);
+}
+.dz-team-child { min-height: 20px; padding-left: 2px; }
+.dz-team-branch {
+  flex: 0 0 auto; width: 10px;
+  color: var(--dz-3); font-size: 10px;
+}
+.dz-team-more { padding: 2px 4px; font-size: 10px; color: var(--dz-3); }
+
 /* ── 页签 ─────────────────────────────────────────── */
 .dz-tabs {
   display: flex; gap: 4px;
