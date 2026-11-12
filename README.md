@@ -196,6 +196,7 @@ DSH 窗口最顶部正中悬一枚小岛，收起时一行看完当前会话在�
 | 内存占用 / 总量 / 可用 | Node `os.totalmem()/freemem()` | 实时 |
 | 显卡型号 / GPU 利用率 | `Win32_VideoController` + `\GPU Engine(*)\Utilization Percentage` | 慢层，12s 刷新 |
 | 磁盘剩余 / 总量 | `Win32_LogicalDisk` | 慢层 |
+| GPU 利用率 | 多引擎求和，clamp 到 0–100% | 慢层 |
 | 电池电量 | `Win32_Battery`（有电池才有） | 慢层 |
 | 正在播放的音乐 | Windows SMTC（`GlobalSystemMediaTransportControlsSessionManager`，WinRT via PowerShell `AsTask().Wait()`） | 歌名 / 艺术家 / 专辑 / 播放进度 / 来源应用 |
 
@@ -207,6 +208,13 @@ DSH 窗口最顶部正中悬一枚小岛，收起时一行看完当前会话在�
 - `refresh()` 复用同一个 in-flight promise，并发调用不会拿到半成品缓存。
 
 **音乐**：走 Windows 系统媒体传输控制，能覆盖网易云 / QQ 音乐 / Spotify / 浏览器视频等提供 SMTC 会话的播放器。
+
+### 磁盘显示精度与告警
+
+曾出现「磁盘 0G 可用」——不是采集错，是当时 C 盘真的只剩 **43 MB**，
+`Round(0.04, 1)` 得 `0`。现在 PowerShell 直接输出**原始字节数**，
+宿主换算成 GB（保留两位），客户端在小于 1GB 时改显示 **MB**（如 `44 MB 可用`），
+并带上盘符（`磁盘 C:`）。低于 1GB 会额外显示红色警示条「系统盘空间严重不足」。
 没播放时显示「♪ 未播放 · 播放音乐后显示」，不会整块消失。若系统不支持会标「音乐信息不可用」。
 
 **开关**：第 10 个动效/功能开关「本机状态」，关掉时不仅隐藏 UI，还会通过 `toggleSystem` 动作让宿主**停掉后台采集**（不再起 PowerShell 子进程）；重新打开后下一轮恢复。
